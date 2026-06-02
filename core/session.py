@@ -1,6 +1,7 @@
 """
 Session and barcode data management.
 """
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
@@ -19,6 +20,7 @@ class Session:
     id: int
     started_at: datetime
     entries: List[BarcodeEntry] = field(default_factory=list)
+    _counts: Counter = field(default_factory=Counter, repr=False)
 
     def add_barcode(self, value: str) -> BarcodeEntry:
         entry = BarcodeEntry(
@@ -28,7 +30,17 @@ class Session:
             sequence=len(self.entries) + 1,
         )
         self.entries.append(entry)
+        self._counts[value] += 1
         return entry
+
+    def count_for(self, value: str) -> int:
+        """How many times *value* has been scanned in this session."""
+        return self._counts[value]
+
+    def clear_entries(self) -> None:
+        """Drop all scans (used by Reset) while keeping the session active."""
+        self.entries.clear()
+        self._counts.clear()
 
     @property
     def count(self) -> int:
@@ -59,7 +71,7 @@ class SessionManager:
     def reset_session(self):
         """Clear current session entries (keeps session active, just clears table)."""
         if self._current is not None:
-            self._current.entries.clear()
+            self._current.clear_entries()
 
     def stop_session(self):
         self._current = None

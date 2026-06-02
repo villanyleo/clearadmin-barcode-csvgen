@@ -17,8 +17,9 @@ class MainWindow(tk.Tk):
     BARCODE_TIMEOUT_MS = 100
 
     # Last-scan status colours.
-    COLOR_SUCCESS = "#1a7f37"  # green
-    COLOR_ERROR = "#cf222e"    # red
+    COLOR_SUCCESS = "#1a7f37"  # green text
+    COLOR_ERROR = "#cf222e"    # red text
+    COLOR_ROW_HIGHLIGHT = "#d4f4d7"  # light-green row background for last scan
 
     def __init__(self):
         super().__init__()
@@ -28,6 +29,9 @@ class MainWindow(tk.Tk):
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
+        # Maps a barcode value -> its Treeview row id, so re-scans update in place.
+        self._row_for_value: dict[str, str] = {}
+        self._highlighted_item: str | None = None
 
         self._build_ui()
         self._bind_scanner_input()
@@ -60,7 +64,7 @@ class MainWindow(tk.Tk):
         table_frame = ttk.Frame(self, padding=(8, 0, 8, 8))
         table_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        columns = ("#", "Barcode", "Time")
+        columns = ("#", "Barcode", "pcs", "Time")
         self._tree = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -70,11 +74,16 @@ class MainWindow(tk.Tk):
 
         self._tree.heading("#", text="#")
         self._tree.heading("Barcode", text="Barcode")
+        self._tree.heading("pcs", text="pcs")
         self._tree.heading("Time", text="Time")
 
         self._tree.column("#", width=50, anchor=tk.CENTER, stretch=False)
-        self._tree.column("Barcode", width=320, anchor=tk.W)
-        self._tree.column("Time", width=160, anchor=tk.CENTER, stretch=False)
+        self._tree.column("Barcode", width=300, anchor=tk.W)
+        self._tree.column("pcs", width=70, anchor=tk.CENTER, stretch=False)
+        self._tree.column("Time", width=150, anchor=tk.CENTER, stretch=False)
+
+        # Light-green background marking the most recently scanned row.
+        self._tree.tag_configure("last_scanned", background=self.COLOR_ROW_HIGHLIGHT)
 
         vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self._tree.yview)
         self._tree.configure(yscrollcommand=vsb.set)
@@ -130,20 +139,37 @@ class MainWindow(tk.Tk):
         entry = self._manager.add_barcode(value)
         if entry is None:
             return
-        self._tree.insert(
-            "",
-            tk.END,
-            values=(
-                entry.sequence,
-                entry.value,
-                entry.timestamp.strftime("%H:%M:%S"),
-            ),
-        )
-        # Auto-scroll to the new row
-        children = self._tree.get_children()
-        if children:
-            self._tree.see(children[-1])
+
+        count = self._manager.current.count_for(value)
+        time_str = entry.timestamp.strftime("%H:%M:%S")
+
+        item = self._row_for_value.get(value)
+        if item is None:
+            # First time this barcode appears this session — add a new row.
+            row_number = len(self._row_for_value) + 1
+            item = self._tree.insert(
+                "", tk.END, values=(row_number, value, count, time_str)
+            )
+            self._row_for_value[value] = item
+        else:
+            # Seen before — bump the pcs count and refresh the last-scan time.
+            self._tree.set(item, "pcs", count)
+            self._tree.set(item, "Time", time_str)
+
+        self._highlight_row(item)
+        self._tree.see(item)
         self._refresh_status()
+
+    def _highlight_row(self, item: str):
+        """Mark *item* as the last-scanned row (light green) and clear the previous one."""
+        if (
+            self._highlighted_item is not None
+            and self._highlighted_item != item
+            and self._tree.exists(self._highlighted_item)
+        ):
+            self._tree.item(self._highlighted_item, tags=())
+        self._tree.item(item, tags=("last_scanned",))
+        self._highlighted_item = item
 
     # ------------------------------------------------------------------ #
     #  Button callbacks                                                    #
@@ -170,6 +196,8 @@ class MainWindow(tk.Tk):
     def _clear_table(self):
         for item in self._tree.get_children():
             self._tree.delete(item)
+        self._row_for_value.clear()
+        self._highlighted_item = None
 
     def _set_scan_status(self, text: str, success: bool):
         """Show the last-scan result in the bottom bar, colour-coded."""
