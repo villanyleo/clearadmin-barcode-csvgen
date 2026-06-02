@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Local virtual environment
+venv/
+
+# PyInstaller / build artifacts
+build/
+dist/
+*.spec
+installer_output/
+
+# OS
+.DS_Store
