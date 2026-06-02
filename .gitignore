@@ -1,4 +1,19 @@
-# Python
+# ── macOS ────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+Icon?
+
+# ── Python ───────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 
@@ -10,6 +25,3 @@ build/
 dist/
 *.spec
 installer_output/
-
-# OS
-.DS_Store

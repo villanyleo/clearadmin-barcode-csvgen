@@ -1,9 +1,17 @@
 name: Build Windows installer
 
-# Build a standalone .exe and a Setup.exe installer on every push.
+# Build the .exe + installer on every push (validates the build),
+# and publish a GitHub Release whenever a version tag like v0.0.1 is pushed.
 on:
   push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
   workflow_dispatch:
+
+permissions:
+  contents: write  # required to create Releases
 
 jobs:
   build:
@@ -38,7 +46,13 @@ jobs:
       - name: Derive version string
         id: version
         shell: bash
-        run: echo "value=0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+        run: |
+          # On a tag push, use the tag (strip the leading "v"); otherwise a dev build number.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-dev.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build installer with Inno Setup
         run: >
@@ -59,3 +73,15 @@ jobs:
           name: HJC-Barcode-Scanner-exe
           path: "dist/HJC Barcode Scanner.exe"
           if-no-files-found: error
+
+      # ── Publish a Release only when a version tag is pushed ──────────
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: HJC Barcode Scanner ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            installer_output/*.exe
+            dist/HJC Barcode Scanner.exe
