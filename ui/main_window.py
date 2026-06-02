@@ -5,7 +5,9 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 
+from core import sound
 from core.session import SessionManager
+from core.validation import is_valid_ean13
 
 
 class MainWindow(tk.Tk):
@@ -13,6 +15,10 @@ class MainWindow(tk.Tk):
     # Scanner fires Enter nearly instantly after the last digit, so a human pressing
     # Enter much slower will still work fine as a separator.
     BARCODE_TIMEOUT_MS = 100
+
+    # Last-scan status colours.
+    COLOR_SUCCESS = "#1a7f37"  # green
+    COLOR_ERROR = "#cf222e"    # red
 
     def __init__(self):
         super().__init__()
@@ -78,11 +84,17 @@ class MainWindow(tk.Tk):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        # ── Bottom status bar ────────────────────────────────────────────
-        self._count_var = tk.StringVar(value="")
+        # ── Bottom status bar (last-scan result) ─────────────────────────
+        self._scan_status_var = tk.StringVar(value="")
         bottom = ttk.Frame(self, padding=(8, 2, 8, 4))
         bottom.pack(side=tk.BOTTOM, fill=tk.X)
-        ttk.Label(bottom, textvariable=self._count_var, anchor=tk.W).pack(side=tk.LEFT)
+        self._scan_status_lbl = ttk.Label(
+            bottom,
+            textvariable=self._scan_status_var,
+            anchor=tk.W,
+            font=("TkDefaultFont", 11, "bold"),
+        )
+        self._scan_status_lbl.pack(side=tk.LEFT)
 
     # ------------------------------------------------------------------ #
     #  Scanner input handling                                              #
@@ -97,12 +109,22 @@ class MainWindow(tk.Tk):
             return
 
         if event.keysym == "Return":
-            barcode = "".join(self._input_buffer).strip()
+            code = "".join(self._input_buffer).strip()
             self._input_buffer.clear()
-            if barcode:
-                self._register_barcode(barcode)
+            if code:
+                self._handle_scan(code)
         elif event.char and event.char.isprintable():
             self._input_buffer.append(event.char)
+
+    def _handle_scan(self, code: str):
+        """Validate a scanned code, then give audio + visual feedback."""
+        if is_valid_ean13(code):
+            self._register_barcode(code)
+            self._set_scan_status(f"{code} scanned", success=True)
+            sound.play_success()
+        else:
+            self._set_scan_status(f"{code} is not an EAN-code", success=False)
+            sound.play_error()
 
     def _register_barcode(self, value: str):
         entry = self._manager.add_barcode(value)
@@ -130,6 +152,7 @@ class MainWindow(tk.Tk):
     def _on_start_session(self):
         session = self._manager.start_session()
         self._clear_table()
+        self._scan_status_var.set("")
         self._btn_start.config(text="New session")
         self._btn_reset.config(state=tk.NORMAL)
         self._refresh_status()
@@ -137,6 +160,7 @@ class MainWindow(tk.Tk):
     def _on_reset(self):
         self._manager.reset_session()
         self._clear_table()
+        self._scan_status_var.set("")
         self._refresh_status()
 
     # ------------------------------------------------------------------ #
@@ -147,15 +171,21 @@ class MainWindow(tk.Tk):
         for item in self._tree.get_children():
             self._tree.delete(item)
 
+    def _set_scan_status(self, text: str, success: bool):
+        """Show the last-scan result in the bottom bar, colour-coded."""
+        self._scan_status_var.set(text)
+        self._scan_status_lbl.configure(
+            foreground=self.COLOR_SUCCESS if success else self.COLOR_ERROR
+        )
+
     def _refresh_status(self):
         session = self._manager.current
         if session is None:
             self._status_var.set("No active session")
-            self._count_var.set("")
         else:
             started = session.started_at.strftime("%H:%M:%S")
-            self._status_var.set(f"Session #{session.id}  —  started {started}")
             count = session.count
-            self._count_var.set(
-                f"{count} barcode{'s' if count != 1 else ''} scanned this session"
+            self._status_var.set(
+                f"Session #{session.id}  —  started {started}   ·   "
+                f"{count} barcode{'s' if count != 1 else ''} scanned"
             )
