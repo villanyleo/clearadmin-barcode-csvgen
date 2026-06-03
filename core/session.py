@@ -104,7 +104,7 @@ class Session:
         session = cls(
             id=data["id"],
             started_at=datetime.fromisoformat(data["started_at"]),
-            name=data.get("name", f"Session {data['id']}"),
+            name=data.get("name", f"Munkamenet {data['id']}"),
             price_type=data.get("price_type"),
         )
         for ed in data.get("entries", []):
@@ -139,12 +139,12 @@ class SessionManager:
         return list(self._sessions)
 
     def _next_default_name(self) -> str:
-        """Lowest 'Session N' not currently used by an open session."""
+        """Lowest 'Munkamenet N' not currently used by an open session."""
         existing = {s.name for s in self._sessions}
         n = 1
-        while f"Session {n}" in existing:
+        while f"Munkamenet {n}" in existing:
             n += 1
-        return f"Session {n}"
+        return f"Munkamenet {n}"
 
     def start_session(self) -> Session:
         # id stays a monotonic, never-reused identity; the display name reuses

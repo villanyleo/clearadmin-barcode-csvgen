@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "HJC Barcode Scanner"
+APP_NAME = "ClearAdmin CSV vonalkod olvaso"
 _STATE_FILENAME = "state.json"
 
 

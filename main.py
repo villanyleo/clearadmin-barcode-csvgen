@@ -1,5 +1,5 @@
 """
-HJC Barcode Scanner — entry point.
+ClearAdmin CSV vonalkód olvasó — belépési pont.
 """
 from ui.main_window import MainWindow
 

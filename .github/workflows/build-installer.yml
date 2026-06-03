@@ -40,7 +40,8 @@ jobs:
           --clean
           --onefile
           --windowed
-          --name "HJC Barcode Scanner"
+          --name "ClearAdmin-CSV-vonalkod-olvaso"
+          --icon "assets/icon.ico"
           --add-data "assets;assets"
           main.py
 
@@ -64,15 +65,15 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HJC-Barcode-Scanner-Setup
+          name: ClearAdmin-CSV-vonalkod-olvaso-Setup
           path: installer_output/*.exe
           if-no-files-found: error
 
       - name: Upload standalone executable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HJC-Barcode-Scanner-exe
-          path: "dist/HJC Barcode Scanner.exe"
+          name: ClearAdmin-CSV-vonalkod-olvaso-exe
+          path: "dist/ClearAdmin-CSV-vonalkod-olvaso.exe"
           if-no-files-found: error
 
       # ── Publish a Release only when a version tag is pushed ──────────
@@ -80,9 +81,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: HJC Barcode Scanner ${{ github.ref_name }}
+          name: ClearAdmin CSV vonalkód olvasó ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
             installer_output/*.exe
-            dist/HJC Barcode Scanner.exe
+            dist/ClearAdmin-CSV-vonalkod-olvaso.exe

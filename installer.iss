@@ -1,4 +1,4 @@
-; Inno Setup script for the HJC Barcode Scanner.
+; Inno Setup script for ClearAdmin CSV vonalkód olvasó.
 ; Wraps the PyInstaller-built executable into a Windows Setup.exe installer.
 ; AppVersion is supplied on the command line via /DAppVersion=... by the CI workflow.
 
@@ -6,34 +6,39 @@
   #define AppVersion "0.0.0"
 #endif
 
+#define AppName "ClearAdmin CSV vonalkód olvasó"
+#define ExeName "ClearAdmin-CSV-vonalkod-olvaso.exe"
+
 [Setup]
-AppId={{F2A7B3C1-9D4E-4A6B-8C2F-HJCBARCODE001}
-AppName=HJC Barcode Scanner
+AppId={{C1EA2A2D-1111-4C7B-9E3A-CLEARADMINCSV1}
+AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=VillanyLeó
-DefaultDirName={autopf}\HJC Barcode Scanner
-DefaultGroupName=HJC Barcode Scanner
+DefaultDirName={autopf}\ClearAdmin CSV vonalkod olvaso
+DefaultGroupName=ClearAdmin CSV vonalkod olvaso
 DisableProgramGroupPage=yes
 OutputDir=installer_output
-OutputBaseFilename=HJC-Barcode-Scanner-Setup-{#AppVersion}
+OutputBaseFilename=ClearAdmin-CSV-vonalkod-olvaso-Setup-{#AppVersion}
+SetupIconFile=assets\icon.ico
+UninstallDisplayIcon={app}\{#ExeName}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "hungarian"; MessagesFile: "compiler:Languages\Hungarian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\HJC Barcode Scanner.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\{#ExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\HJC Barcode Scanner"; Filename: "{app}\HJC Barcode Scanner.exe"
-Name: "{group}\{cm:UninstallProgram,HJC Barcode Scanner}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\HJC Barcode Scanner"; Filename: "{app}\HJC Barcode Scanner.exe"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}"
+Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#ExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\HJC Barcode Scanner.exe"; Description: "{cm:LaunchProgram,HJC Barcode Scanner}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#ExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent

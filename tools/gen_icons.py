@@ -93,9 +93,20 @@ def draw_delete(size, name, color=COLOR):
     _save(img, size, name)
 
 
+def build_app_ico():
+    """Build assets/icon.ico (multi-size) from assets/icon.png for the .exe/installer."""
+    src = os.path.join(OUT_DIR, "icon.png")
+    if not os.path.exists(src):
+        return
+    img = Image.open(src).convert("RGBA")
+    sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    img.save(os.path.join(OUT_DIR, "icon.ico"), sizes=sizes)
+
+
 if __name__ == "__main__":
     draw_edit(18, "edit.png")
     draw_edit(36, "edit@2x.png")
     draw_delete(18, "delete_red.png", COLOR_RED)
     draw_delete(36, "delete_red@2x.png", COLOR_RED)
+    build_app_ico()
     print(f"Icons written to {OUT_DIR}")

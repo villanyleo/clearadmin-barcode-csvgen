@@ -32,9 +32,10 @@ class MainWindow(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("HJC Barcode Scanner")
+        self.title("ClearAdmin CSV vonalkód olvasó")
         self.geometry("980x600")
         self.minsize(820, 420)
+        self._set_app_icon()
 
         self.style = ttk.Style(self)
         self._configure_styles()
@@ -99,6 +100,13 @@ class MainWindow(tk.Tk):
                 pass  # fall back to a text glyph
         return icons
 
+    def _set_app_icon(self):
+        try:
+            self._app_icon = tk.PhotoImage(file=self._asset_path("icon.png"))
+            self.iconphoto(True, self._app_icon)
+        except tk.TclError:
+            pass
+
     # ------------------------------------------------------------------ #
     #  UI construction                                                     #
     # ------------------------------------------------------------------ #
@@ -109,15 +117,15 @@ class MainWindow(tk.Tk):
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
         self._btn_start = ttk.Button(
-            toolbar, text="New session", command=self._on_start_session
+            toolbar, text="Új munkamenet", command=self._on_start_session
         )
         self._btn_start.pack(side=tk.LEFT, padx=(0, 6))
 
-        self._btn_reset = ttk.Button(toolbar, text="Reset", command=self._on_reset)
+        self._btn_reset = ttk.Button(toolbar, text="Ürítés", command=self._on_reset)
         self._btn_reset.pack(side=tk.LEFT)
 
         self._btn_export = ttk.Button(
-            toolbar, text="Export…", command=self._on_export
+            toolbar, text="Exportálás…", command=self._on_export
         )
         self._btn_export.pack(side=tk.LEFT, padx=(6, 0))
 
@@ -134,10 +142,10 @@ class MainWindow(tk.Tk):
         self._price_combo.bind("<<ComboboxSelected>>", self._on_price_change)
         self._price_combo.pack(side=tk.RIGHT, padx=(4, 0))
 
-        ttk.Label(toolbar, text="Price:").pack(side=tk.RIGHT, padx=(12, 4))
+        ttk.Label(toolbar, text="Ár:").pack(side=tk.RIGHT, padx=(12, 4))
 
         self._btn_load = ttk.Button(
-            toolbar, text="Load CSV…", command=self._on_load_csv
+            toolbar, text="CSV betöltése…", command=self._on_load_csv
         )
         self._btn_load.pack(side=tk.RIGHT)
 
@@ -252,10 +260,10 @@ class MainWindow(tk.Tk):
         """Validate a scanned code, then give audio + visual feedback."""
         if is_valid_ean13(code):
             self._register_barcode(code)
-            self._set_scan_status(f"{code} scanned", success=True)
+            self._set_scan_status(f"{code} beolvasva", success=True)
             sound.play_success()
         else:
-            self._set_scan_status(f"{code} is not an EAN-code", success=False)
+            self._set_scan_status(f"{code} nem EAN-kód", success=False)
             sound.play_error()
 
     def _register_barcode(self, value: str):
@@ -300,7 +308,7 @@ class MainWindow(tk.Tk):
         if session is None:
             return
         if not messagebox.askyesno(
-            "Delete product", "Remove this product from the session?"
+            "Termék törlése", "Eltávolítható ez a termék a munkamenetből?"
         ):
             return
         session.remove_product(value)
@@ -356,7 +364,8 @@ class MainWindow(tk.Tk):
 
     def _on_rename_session(self, session: Session):
         new_name = simpledialog.askstring(
-            "Rename session", "Session name:", initialvalue=session.name, parent=self
+            "Munkamenet átnevezése", "Munkamenet neve:",
+            initialvalue=session.name, parent=self,
         )
         if new_name is not None and new_name.strip():
             session.name = new_name.strip()
@@ -365,9 +374,9 @@ class MainWindow(tk.Tk):
 
     def _on_delete_session(self, session: Session):
         if session.entries and not messagebox.askyesno(
-            "Delete session",
-            f"Delete “{session.name}” and its {session.count} scanned "
-            f"piece{'s' if session.count != 1 else ''}?",
+            "Munkamenet törlése",
+            f"Törölhető a(z) „{session.name}” és a benne lévő "
+            f"{session.count} beolvasott tétel?",
         ):
             return
         self._manager.delete_session(session)
@@ -388,7 +397,9 @@ class MainWindow(tk.Tk):
     def _on_export(self):
         session = self._manager.current
         if session is None or session.count == 0:
-            messagebox.showinfo("Export", "This session has no scanned items to export.")
+            messagebox.showinfo(
+                "Exportálás", "Ebben a munkamenetben nincs exportálható tétel."
+            )
             return
 
         # Build rows in the same order as the table: (name, price, quantity).
@@ -402,18 +413,18 @@ class MainWindow(tk.Tk):
             rows.append((name, price, count))
 
         if unmatched and not messagebox.askokcancel(
-            "Export",
-            f"{unmatched} of {len(rows)} item(s) are not in the loaded product list.\n"
-            f"They will be exported with the barcode as the name and no price.\n\n"
-            f"Continue?",
+            "Exportálás",
+            f"{unmatched} / {len(rows)} tétel nincs a betöltött terméklistában.\n"
+            f"Ezek a vonalkóddal, ár nélkül kerülnek exportálásra.\n\n"
+            f"Folytatja?",
         ):
             return
 
         path = filedialog.asksaveasfilename(
-            title="Export session",
+            title="Munkamenet exportálása",
             defaultextension=".csv",
             initialfile=f"{session.name}.csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            filetypes=[("CSV fájlok", "*.csv"), ("Minden fájl", "*.*")],
         )
         if not path:
             return
@@ -421,13 +432,14 @@ class MainWindow(tk.Tk):
         try:
             export.write_export(path, rows)
         except Exception as exc:
-            messagebox.showerror("Export failed", f"Could not write the file:\n\n{exc}")
+            messagebox.showerror(
+                "Sikertelen exportálás", f"A fájl írása nem sikerült:\n\n{exc}"
+            )
             return
 
         # The session is intentionally left intact so it can still be edited later.
         self._set_scan_status(
-            f"Exported {len(rows)} item{'s' if len(rows) != 1 else ''} "
-            f"to {os.path.basename(path)}",
+            f"{len(rows)} tétel exportálva ide: {os.path.basename(path)}",
             success=True,
         )
 
@@ -454,8 +466,8 @@ class MainWindow(tk.Tk):
 
     def _on_load_csv(self):
         path = filedialog.askopenfilename(
-            title="Select product CSV",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Termék CSV kiválasztása",
+            filetypes=[("CSV fájlok", "*.csv"), ("Minden fájl", "*.*")],
         )
         if not path:
             return
@@ -463,7 +475,7 @@ class MainWindow(tk.Tk):
             catalog = load_catalog(path)
         except Exception as exc:
             messagebox.showerror(
-                "Could not load CSV", f"Failed to read the file:\n\n{exc}"
+                "A CSV nem tölthető be", f"A fájl beolvasása nem sikerült:\n\n{exc}"
             )
             return
 
@@ -478,7 +490,7 @@ class MainWindow(tk.Tk):
             self._price_var.set(session.price_type or "")
         self._refresh_catalog_columns()
         self._set_scan_status(
-            f"Loaded {len(catalog)} products from {os.path.basename(path)}",
+            f"{len(catalog)} termék betöltve innen: {os.path.basename(path)}",
             success=True,
         )
 
@@ -532,11 +544,11 @@ class MainWindow(tk.Tk):
     def _refresh_status(self):
         session = self._manager.current
         if session is None:
-            self._status_var.set("No active session")
+            self._status_var.set("Nincs aktív munkamenet")
             return
         started = session.started_at.strftime("%H:%M:%S")
-        text = f"{session.name}  —  started {started}   ·   {session.count} scanned"
+        text = f"{session.name}  —  kezdés {started}   ·   {session.count} beolvasva"
         n = len(self._manager.sessions)
         if n > 1:
-            text += f"   ({n} sessions open)"
+            text += f"   ({n} nyitott munkamenet)"
         self._status_var.set(text)

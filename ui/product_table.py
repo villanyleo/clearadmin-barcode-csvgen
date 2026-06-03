@@ -13,13 +13,13 @@ from tkinter import ttk
 # (header text, pixel width, anchor) for each column.
 _COLUMNS = [
     ("#", 36, tk.CENTER),
-    ("Barcode", 110, tk.W),
-    ("Name", 300, tk.W),
+    ("Vonalkód", 110, tk.W),
+    ("Név", 300, tk.W),
     ("", 30, tk.CENTER),       # minus button
-    ("pcs", 44, tk.CENTER),
+    ("db", 44, tk.CENTER),
     ("", 30, tk.CENTER),       # plus button
-    ("Price", 84, tk.E),
-    ("Time", 84, tk.CENTER),
+    ("Ár", 84, tk.E),
+    ("Idő", 84, tk.CENTER),
     ("", 40, tk.CENTER),       # delete button
 ]
 _WIDTHS = [w for _, w, _ in _COLUMNS]
