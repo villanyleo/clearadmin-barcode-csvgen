@@ -1,11 +1,13 @@
 """
 Main application window.
 """
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 from datetime import datetime
 
 from core import sound
+from core.catalog import Catalog, load_catalog
 from core.session import SessionManager
 from core.validation import is_valid_ean13
 
@@ -24,14 +26,16 @@ class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("HJC Barcode Scanner")
-        self.geometry("780x520")
-        self.minsize(600, 400)
+        self.geometry("960x560")
+        self.minsize(760, 400)
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
         # Maps a barcode value -> its Treeview row id, so re-scans update in place.
         self._row_for_value: dict[str, str] = {}
         self._highlighted_item: str | None = None
+        # Product catalog loaded from a CSV (None until the user loads one).
+        self._catalog: Catalog | None = None
 
         self._build_ui()
         self._bind_scanner_input()
@@ -60,11 +64,31 @@ class MainWindow(tk.Tk):
         status_lbl = ttk.Label(toolbar, textvariable=self._status_var, anchor=tk.W)
         status_lbl.pack(side=tk.LEFT, padx=16)
 
+        # ── Right side: CSV catalog + price-list selector ────────────────
+        # Packed right-to-left, so the visual order is: [Load CSV…] [Price:] [▾]
+        self._price_var = tk.StringVar()
+        self._price_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self._price_var,
+            state="disabled",
+            width=14,
+        )
+        self._price_combo.bind("<<ComboboxSelected>>", self._on_price_change)
+        self._price_combo.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self._price_label = ttk.Label(toolbar, text="Price:")
+        self._price_label.pack(side=tk.RIGHT, padx=(12, 4))
+
+        self._btn_load = ttk.Button(
+            toolbar, text="Load CSV…", command=self._on_load_csv
+        )
+        self._btn_load.pack(side=tk.RIGHT)
+
         # ── Barcode table ────────────────────────────────────────────────
         table_frame = ttk.Frame(self, padding=(8, 0, 8, 8))
         table_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        columns = ("#", "Barcode", "pcs", "Time")
+        columns = ("#", "Barcode", "Name", "pcs", "Price", "Time")
         self._tree = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -74,13 +98,17 @@ class MainWindow(tk.Tk):
 
         self._tree.heading("#", text="#")
         self._tree.heading("Barcode", text="Barcode")
+        self._tree.heading("Name", text="Name")
         self._tree.heading("pcs", text="pcs")
+        self._tree.heading("Price", text="Price")
         self._tree.heading("Time", text="Time")
 
-        self._tree.column("#", width=50, anchor=tk.CENTER, stretch=False)
-        self._tree.column("Barcode", width=300, anchor=tk.W)
-        self._tree.column("pcs", width=70, anchor=tk.CENTER, stretch=False)
-        self._tree.column("Time", width=150, anchor=tk.CENTER, stretch=False)
+        self._tree.column("#", width=40, anchor=tk.CENTER, stretch=False)
+        self._tree.column("Barcode", width=130, anchor=tk.W, stretch=False)
+        self._tree.column("Name", width=380, anchor=tk.W)
+        self._tree.column("pcs", width=55, anchor=tk.CENTER, stretch=False)
+        self._tree.column("Price", width=90, anchor=tk.E, stretch=False)
+        self._tree.column("Time", width=110, anchor=tk.CENTER, stretch=False)
 
         # Light-green background marking the most recently scanned row.
         self._tree.tag_configure("last_scanned", background=self.COLOR_ROW_HIGHLIGHT)
@@ -147,8 +175,9 @@ class MainWindow(tk.Tk):
         if item is None:
             # First time this barcode appears this session — add a new row.
             row_number = len(self._row_for_value) + 1
+            name, price = self._catalog_fields(value)
             item = self._tree.insert(
-                "", tk.END, values=(row_number, value, count, time_str)
+                "", tk.END, values=(row_number, value, name, count, price, time_str)
             )
             self._row_for_value[value] = item
         else:
@@ -159,6 +188,15 @@ class MainWindow(tk.Tk):
         self._highlight_row(item)
         self._tree.see(item)
         self._refresh_status()
+
+    def _catalog_fields(self, value: str) -> tuple[str, str]:
+        """Return (name, price) for *value* from the loaded catalog, or blanks."""
+        if self._catalog is None:
+            return "", ""
+        product = self._catalog.get(value)
+        if product is None:
+            return "", ""
+        return product.name, product.prices.get(self._price_var.get(), "")
 
     def _highlight_row(self, item: str):
         """Mark *item* as the last-scanned row (light green) and clear the previous one."""
@@ -188,6 +226,47 @@ class MainWindow(tk.Tk):
         self._clear_table()
         self._scan_status_var.set("")
         self._refresh_status()
+
+    def _on_load_csv(self):
+        path = filedialog.askopenfilename(
+            title="Select product CSV",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            catalog = load_catalog(path)
+        except Exception as exc:
+            messagebox.showerror(
+                "Could not load CSV", f"Failed to read the file:\n\n{exc}"
+            )
+            return
+
+        self._catalog = catalog
+        self._price_combo.config(values=catalog.price_names, state="readonly")
+        if catalog.price_names:
+            self._price_var.set(catalog.price_names[0])
+        else:
+            self._price_var.set("")
+        # Fill in name/price for any rows already scanned before the CSV loaded.
+        self._refresh_catalog_columns()
+        self._set_scan_status(
+            f"Loaded {len(catalog)} products from {os.path.basename(path)}",
+            success=True,
+        )
+
+    def _on_price_change(self, event=None):
+        # Re-price every already-scanned row for the newly selected price list.
+        self._refresh_catalog_columns()
+
+    def _refresh_catalog_columns(self):
+        """Update the Name and Price cells of every row from the loaded catalog."""
+        if self._catalog is None:
+            return
+        for value, item in self._row_for_value.items():
+            name, price = self._catalog_fields(value)
+            self._tree.set(item, "Name", name)
+            self._tree.set(item, "Price", price)
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #
