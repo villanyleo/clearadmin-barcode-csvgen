@@ -3,43 +3,52 @@ Main application window.
 """
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from datetime import datetime
+from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from core import sound
 from core.catalog import Catalog, load_catalog
-from core.session import SessionManager
+from core.session import Session, SessionManager
 from core.validation import is_valid_ean13
 
 
 class MainWindow(tk.Tk):
-    # Minimum time (ms) between two Enter presses to be treated as distinct barcodes.
-    # Scanner fires Enter nearly instantly after the last digit, so a human pressing
-    # Enter much slower will still work fine as a separator.
-    BARCODE_TIMEOUT_MS = 100
-
-    # Last-scan status colours.
+    # Last-scan status colours (bottom bar text).
     COLOR_SUCCESS = "#1a7f37"  # green text
     COLOR_ERROR = "#cf222e"    # red text
     COLOR_ROW_HIGHLIGHT = "#d4f4d7"  # light-green row background for last scan
 
+    # Tab-bar colours.
+    COLOR_TAB_BAR_BG = "#bfbfbf"
+    COLOR_TAB_ACTIVE = "#ffffff"
+    COLOR_TAB_INACTIVE = "#dcdcdc"
+
+    # Icon glyphs for the per-tab buttons.
+    ICON_EDIT = "✎"    # ✎ pencil
+    ICON_DELETE = "\U0001f5d1"  # 🗑 wastebasket
+
+    # Widget classes that should receive keystrokes for normal typing
+    # (so the scanner handler doesn't swallow text entry, e.g. rename dialog).
+    _TEXT_ENTRY_CLASSES = {"Entry", "TEntry", "TCombobox", "Text", "Spinbox"}
+
     def __init__(self):
         super().__init__()
         self.title("HJC Barcode Scanner")
-        self.geometry("960x560")
-        self.minsize(760, 400)
+        self.geometry("980x600")
+        self.minsize(820, 420)
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
-        # Maps a barcode value -> its Treeview row id, so re-scans update in place.
+        # Maps a barcode value -> its Treeview row id for the ACTIVE session,
+        # so re-scans update in place. Rebuilt whenever the active tab changes.
         self._row_for_value: dict[str, str] = {}
         self._highlighted_item: str | None = None
-        # Product catalog loaded from a CSV (None until the user loads one).
+        # Product catalog loaded from a CSV (shared by all sessions; None until loaded).
         self._catalog: Catalog | None = None
+        self._price_var = tk.StringVar()
 
         self._build_ui()
         self._bind_scanner_input()
-        self._refresh_status()
+        self._on_session_changed()
 
     # ------------------------------------------------------------------ #
     #  UI construction                                                     #
@@ -61,39 +70,36 @@ class MainWindow(tk.Tk):
         self._btn_reset.pack(side=tk.LEFT)
 
         self._status_var = tk.StringVar(value="No active session")
-        status_lbl = ttk.Label(toolbar, textvariable=self._status_var, anchor=tk.W)
-        status_lbl.pack(side=tk.LEFT, padx=16)
+        ttk.Label(toolbar, textvariable=self._status_var, anchor=tk.W).pack(
+            side=tk.LEFT, padx=16
+        )
 
         # ── Right side: CSV catalog + price-list selector ────────────────
         # Packed right-to-left, so the visual order is: [Load CSV…] [Price:] [▾]
-        self._price_var = tk.StringVar()
         self._price_combo = ttk.Combobox(
-            toolbar,
-            textvariable=self._price_var,
-            state="disabled",
-            width=14,
+            toolbar, textvariable=self._price_var, state="disabled", width=14
         )
         self._price_combo.bind("<<ComboboxSelected>>", self._on_price_change)
         self._price_combo.pack(side=tk.RIGHT, padx=(4, 0))
 
-        self._price_label = ttk.Label(toolbar, text="Price:")
-        self._price_label.pack(side=tk.RIGHT, padx=(12, 4))
+        ttk.Label(toolbar, text="Price:").pack(side=tk.RIGHT, padx=(12, 4))
 
         self._btn_load = ttk.Button(
             toolbar, text="Load CSV…", command=self._on_load_csv
         )
         self._btn_load.pack(side=tk.RIGHT)
 
+        # ── Session tab bar (one tab per open session) ───────────────────
+        self._tab_bar = tk.Frame(self, bg=self.COLOR_TAB_BAR_BG)
+        self._tab_bar.pack(side=tk.TOP, fill=tk.X)
+
         # ── Barcode table ────────────────────────────────────────────────
-        table_frame = ttk.Frame(self, padding=(8, 0, 8, 8))
+        table_frame = ttk.Frame(self, padding=(8, 6, 8, 8))
         table_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         columns = ("#", "Barcode", "Name", "pcs", "Price", "Time")
         self._tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            selectmode="browse",
+            table_frame, columns=columns, show="headings", selectmode="browse"
         )
 
         self._tree.heading("#", text="#")
@@ -134,6 +140,41 @@ class MainWindow(tk.Tk):
         self._scan_status_lbl.pack(side=tk.LEFT)
 
     # ------------------------------------------------------------------ #
+    #  Tab bar                                                             #
+    # ------------------------------------------------------------------ #
+
+    def _rebuild_tab_bar(self):
+        for child in self._tab_bar.winfo_children():
+            child.destroy()
+
+        active = self._manager.current
+        for session in self._manager.sessions:
+            is_active = session is active
+            bg = self.COLOR_TAB_ACTIVE if is_active else self.COLOR_TAB_INACTIVE
+
+            tab = tk.Frame(self._tab_bar, bg=bg, bd=1, relief=tk.RAISED)
+            tab.pack(side=tk.LEFT, padx=(4, 0), pady=(4, 0))
+
+            name_lbl = tk.Label(
+                tab,
+                text=session.name,
+                bg=bg,
+                padx=8,
+                cursor="hand2",
+                font=("TkDefaultFont", 10, "bold" if is_active else "normal"),
+            )
+            name_lbl.pack(side=tk.LEFT)
+            name_lbl.bind("<Button-1>", lambda e, s=session: self._select_session(s))
+
+            edit_lbl = tk.Label(tab, text=self.ICON_EDIT, bg=bg, cursor="hand2", padx=2)
+            edit_lbl.pack(side=tk.LEFT)
+            edit_lbl.bind("<Button-1>", lambda e, s=session: self._on_rename_session(s))
+
+            del_lbl = tk.Label(tab, text=self.ICON_DELETE, bg=bg, cursor="hand2", padx=2)
+            del_lbl.pack(side=tk.LEFT, padx=(0, 6))
+            del_lbl.bind("<Button-1>", lambda e, s=session: self._on_delete_session(s))
+
+    # ------------------------------------------------------------------ #
     #  Scanner input handling                                              #
     # ------------------------------------------------------------------ #
 
@@ -142,6 +183,11 @@ class MainWindow(tk.Tk):
         self.bind_all("<Key>", self._on_key)
 
     def _on_key(self, event):
+        # Let normal typing through when a text field (e.g. the rename dialog) is focused.
+        focus = self.focus_get()
+        if focus is not None and focus.winfo_class() in self._TEXT_ENTRY_CLASSES:
+            return
+
         if not self._manager.is_active:
             return
 
@@ -173,7 +219,7 @@ class MainWindow(tk.Tk):
 
         item = self._row_for_value.get(value)
         if item is None:
-            # First time this barcode appears this session — add a new row.
+            # First time this barcode appears in this session — add a new row.
             row_number = len(self._row_for_value) + 1
             name, price = self._catalog_fields(value)
             item = self._tree.insert(
@@ -210,22 +256,73 @@ class MainWindow(tk.Tk):
         self._highlighted_item = item
 
     # ------------------------------------------------------------------ #
-    #  Button callbacks                                                    #
+    #  Session / tab callbacks                                             #
     # ------------------------------------------------------------------ #
 
     def _on_start_session(self):
-        session = self._manager.start_session()
-        self._clear_table()
+        self._manager.start_session()
         self._scan_status_var.set("")
-        self._btn_start.config(text="New session")
-        self._btn_reset.config(state=tk.NORMAL)
-        self._refresh_status()
+        self._on_session_changed()
+
+    def _select_session(self, session: Session):
+        self._manager.select_session(session)
+        self._scan_status_var.set("")
+        self._on_session_changed()
+
+    def _on_rename_session(self, session: Session):
+        new_name = simpledialog.askstring(
+            "Rename session", "Session name:", initialvalue=session.name, parent=self
+        )
+        if new_name is not None and new_name.strip():
+            session.name = new_name.strip()
+            self._rebuild_tab_bar()
+            self._refresh_status()
+
+    def _on_delete_session(self, session: Session):
+        if session.entries and not messagebox.askyesno(
+            "Delete session",
+            f"Delete “{session.name}” and its {session.count} scanned "
+            f"piece{'s' if session.count != 1 else ''}?",
+        ):
+            return
+        self._manager.delete_session(session)
+        self._scan_status_var.set("")
+        self._on_session_changed()
 
     def _on_reset(self):
+        if self._manager.current is None:
+            return
         self._manager.reset_session()
-        self._clear_table()
+        self._populate_table_from_session(self._manager.current)
         self._scan_status_var.set("")
         self._refresh_status()
+
+    def _on_session_changed(self):
+        """Sync the whole UI to the currently active session (or the empty state)."""
+        self._rebuild_tab_bar()
+        session = self._manager.current
+
+        if session is None:
+            self._btn_start.config(text="Start session")
+            self._btn_reset.config(state=tk.DISABLED)
+            self._clear_table()
+            self._refresh_status()
+            return
+
+        self._btn_start.config(text="New session")
+        self._btn_reset.config(state=tk.NORMAL)
+
+        # Default this session's price list to the first one if a catalog is loaded.
+        if self._catalog and not session.price_type and self._catalog.price_names:
+            session.price_type = self._catalog.price_names[0]
+        self._price_var.set(session.price_type or "")
+
+        self._populate_table_from_session(session)
+        self._refresh_status()
+
+    # ------------------------------------------------------------------ #
+    #  CSV catalog callbacks                                               #
+    # ------------------------------------------------------------------ #
 
     def _on_load_csv(self):
         path = filedialog.askopenfilename(
@@ -244,11 +341,12 @@ class MainWindow(tk.Tk):
 
         self._catalog = catalog
         self._price_combo.config(values=catalog.price_names, state="readonly")
-        if catalog.price_names:
-            self._price_var.set(catalog.price_names[0])
-        else:
-            self._price_var.set("")
-        # Fill in name/price for any rows already scanned before the CSV loaded.
+
+        session = self._manager.current
+        if session is not None:
+            if not session.price_type and catalog.price_names:
+                session.price_type = catalog.price_names[0]
+            self._price_var.set(session.price_type or "")
         self._refresh_catalog_columns()
         self._set_scan_status(
             f"Loaded {len(catalog)} products from {os.path.basename(path)}",
@@ -256,7 +354,10 @@ class MainWindow(tk.Tk):
         )
 
     def _on_price_change(self, event=None):
-        # Re-price every already-scanned row for the newly selected price list.
+        # The chosen price list belongs to the active session.
+        session = self._manager.current
+        if session is not None:
+            session.price_type = self._price_var.get()
         self._refresh_catalog_columns()
 
     def _refresh_catalog_columns(self):
@@ -278,6 +379,25 @@ class MainWindow(tk.Tk):
         self._row_for_value.clear()
         self._highlighted_item = None
 
+    def _populate_table_from_session(self, session: Session):
+        """Rebuild the table to show *session*'s scans (used on tab switch / reset)."""
+        self._clear_table()
+        for value, count, last_ts in session.aggregated():
+            name, price = self._catalog_fields(value)
+            row_number = len(self._row_for_value) + 1
+            item = self._tree.insert(
+                "",
+                tk.END,
+                values=(row_number, value, name, count, price,
+                        last_ts.strftime("%H:%M:%S")),
+            )
+            self._row_for_value[value] = item
+
+        last = session.last_value()
+        if last is not None and last in self._row_for_value:
+            self._highlight_row(self._row_for_value[last])
+            self._tree.see(self._row_for_value[last])
+
     def _set_scan_status(self, text: str, success: bool):
         """Show the last-scan result in the bottom bar, colour-coded."""
         self._scan_status_var.set(text)
@@ -289,10 +409,14 @@ class MainWindow(tk.Tk):
         session = self._manager.current
         if session is None:
             self._status_var.set("No active session")
-        else:
-            started = session.started_at.strftime("%H:%M:%S")
-            count = session.count
-            self._status_var.set(
-                f"Session #{session.id}  —  started {started}   ·   "
-                f"{count} barcode{'s' if count != 1 else ''} scanned"
-            )
+            return
+        started = session.started_at.strftime("%H:%M:%S")
+        count = session.count
+        text = (
+            f"{session.name}  —  started {started}   ·   "
+            f"{count} scanned"
+        )
+        n = len(self._manager.sessions)
+        if n > 1:
+            text += f"   ({n} sessions open)"
+        self._status_var.set(text)
