@@ -6,7 +6,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
-from core import persistence, sound
+from core import export, persistence, sound
 from core.catalog import Catalog, load_catalog
 from core.session import Session, SessionManager
 from core.validation import is_valid_ean13
@@ -118,6 +118,11 @@ class MainWindow(tk.Tk):
 
         self._btn_reset = ttk.Button(toolbar, text="Reset", command=self._on_reset)
         self._btn_reset.pack(side=tk.LEFT)
+
+        self._btn_export = ttk.Button(
+            toolbar, text="Export…", command=self._on_export
+        )
+        self._btn_export.pack(side=tk.LEFT, padx=(6, 0))
 
         self._status_var = tk.StringVar(value="")
         ttk.Label(toolbar, textvariable=self._status_var, anchor=tk.W).pack(
@@ -400,6 +405,52 @@ class MainWindow(tk.Tk):
         self._populate_table_from_session(self._manager.current)
         self._scan_status_var.set("")
         self._refresh_status()
+
+    def _on_export(self):
+        session = self._manager.current
+        if session is None or session.count == 0:
+            messagebox.showinfo("Export", "This session has no scanned items to export.")
+            return
+
+        # Build rows in the same order as the table: (name, price, quantity).
+        rows = []
+        unmatched = 0
+        for value, count, _last_ts in session.aggregated():
+            name, price = self._catalog_fields(value)
+            if not name:
+                unmatched += 1
+                name = value  # fall back to the barcode so the item is still identifiable
+            rows.append((name, price, count))
+
+        if unmatched and not messagebox.askokcancel(
+            "Export",
+            f"{unmatched} of {len(rows)} item(s) are not in the loaded product list.\n"
+            f"They will be exported with the barcode as the name and no price.\n\n"
+            f"Continue?",
+        ):
+            return
+
+        path = filedialog.asksaveasfilename(
+            title="Export session",
+            defaultextension=".csv",
+            initialfile=f"{session.name}.csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        try:
+            export.write_export(path, rows)
+        except Exception as exc:
+            messagebox.showerror("Export failed", f"Could not write the file:\n\n{exc}")
+            return
+
+        # The session is intentionally left intact so it can still be edited later.
+        self._set_scan_status(
+            f"Exported {len(rows)} item{'s' if len(rows) != 1 else ''} "
+            f"to {os.path.basename(path)}",
+            success=True,
+        )
 
     def _on_session_changed(self):
         """Sync the whole UI to the currently active session."""
