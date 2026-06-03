@@ -121,11 +121,11 @@ class MainWindow(tk.Tk):
         )
         self._btn_start.pack(side=tk.LEFT, padx=(0, 6))
 
-        self._btn_reset = ttk.Button(toolbar, text="Ürítés", command=self._on_reset)
+        self._btn_reset = ttk.Button(toolbar, text="Visszaállítás", command=self._on_reset)
         self._btn_reset.pack(side=tk.LEFT)
 
         self._btn_export = ttk.Button(
-            toolbar, text="Exportálás…", command=self._on_export
+            toolbar, text="Mentés", command=self._on_export
         )
         self._btn_export.pack(side=tk.LEFT, padx=(6, 0))
 
@@ -145,7 +145,7 @@ class MainWindow(tk.Tk):
         ttk.Label(toolbar, text="Ár:").pack(side=tk.RIGHT, padx=(12, 4))
 
         self._btn_load = ttk.Button(
-            toolbar, text="CSV betöltése…", command=self._on_load_csv
+            toolbar, text="Árlista betöltése…", command=self._on_load_csv
         )
         self._btn_load.pack(side=tk.RIGHT)
 

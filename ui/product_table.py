@@ -14,11 +14,11 @@ from tkinter import ttk
 _COLUMNS = [
     ("#", 36, tk.CENTER),
     ("Vonalkód", 110, tk.W),
-    ("Név", 300, tk.W),
+    ("Terméknév", 300, tk.W),
     ("", 30, tk.CENTER),       # minus button
-    ("db", 44, tk.CENTER),
+    ("Darabszám", 44, tk.CENTER),
     ("", 30, tk.CENTER),       # plus button
-    ("Ár", 84, tk.E),
+    ("Egységár (nettó)", 84, tk.E),
     ("Idő", 84, tk.CENTER),
     ("", 40, tk.CENTER),       # delete button
 ]
