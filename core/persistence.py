@@ -2,7 +2,7 @@
 Az alkalmazás állapotának mentése és visszatöltése indítások között.
 
 Az állapot JSON-ként, a felhasználónkénti alkalmazásadat-könyvtárban tárolódik,
-így túléli az újraindításokat (és az .exe frissítését / újratelepítését).
+így túléli az újraindításokat (és a program frissítését / újratelepítését).
 """
 import json
 import os
@@ -28,7 +28,7 @@ def state_file() -> Path:
 
 
 def load_state() -> dict | None:
-    """A mentett állapot szótárát adja vissza, vagy None-t, ha nincs / nem olvasható."""
+    """A mentett állapotot adja vissza, vagy None-t, ha nincs / nem olvasható."""
     try:
         with open(state_file(), "r", encoding="utf-8") as f:
             return json.load(f)
@@ -37,8 +37,7 @@ def load_state() -> dict | None:
 
 
 def save_state(data: dict) -> None:
-    """A *data* adatot JSON-ként írja ki. Legjobb szándékú: soha nem dob hibát,
-    így nem akadályozhatja a kilépést."""
+    """A *data* adatot JSON-ként írja ki."""
     path = state_file()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

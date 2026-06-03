@@ -1,5 +1,5 @@
 """
-Munkamenet- és vonalkódadatok kezelése.
+Session- és vonalkódadatok kezelése.
 """
 from collections import Counter
 from dataclasses import dataclass, field
@@ -44,7 +44,7 @@ class Session:
         self.add_barcode(value)
 
     def decrement(self, value: str) -> None:
-        """Egy termék mennyiségének kézi csökkentése eggyel (sosem egy alá)."""
+        """Egy termék mennyiségének kézi csökkentése eggyel"""
         if self._counts.get(value, 0) <= 1:
             return
         for i in range(len(self.entries) - 1, -1, -1):
@@ -142,8 +142,6 @@ class SessionManager:
         return f"Munkamenet {n}"
 
     def start_session(self) -> Session:
-        # az id monoton, soha újra nem használt azonosító; a megjelenített név a
-        # nyitott munkamenetek közül a legkisebb szabad "Munkamenet N" helyet veszi.
         self._session_counter += 1
         session = Session(
             id=self._session_counter,
@@ -160,7 +158,7 @@ class SessionManager:
             self._current = session
 
     def delete_session(self, session: Session) -> Optional[Session]:
-        """Eltávolítja a *session* munkamenetet. Ha aktív volt, egy szomszédot aktivál.
+        """Eltávolítja a *session* munkamenetet. Ha aktív volt, egy szomszédos sessiont aktivál.
         Az új aktív munkamenetet adja vissza (vagy None-t, ha nem maradt)."""
         if session not in self._sessions:
             return self._current

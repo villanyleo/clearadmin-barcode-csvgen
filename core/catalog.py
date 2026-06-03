@@ -5,7 +5,7 @@ Várt séma:
     1. oszlop = "ean"  — az EAN-13 vonalkód
     2. oszlop = "name" — a termék neve
     minden további, nem üres fejlécű oszlop egy elnevezett árlista
-    (pl. Kisker, Nagyker, VIP, Export)
+    (pl. Kisker, Nagyker, Export, stb.)
 
 A fájl tartalmazhat UTF-8 BOM-ot és egy felesleges, üres záró oszlopot; mindkettőt
 itt kezeljük. Ha ugyanaz az EAN több sorban szerepel, az első nyer.

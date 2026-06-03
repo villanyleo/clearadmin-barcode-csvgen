@@ -1,5 +1,5 @@
 """
-ClearAdmin CSV vonalkód olvasó — belépési pont.
+ClearAdmin CSV vonalkód olvasó
 """
 from ui.main_window import MainWindow
 

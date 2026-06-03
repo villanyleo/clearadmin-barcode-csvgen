@@ -1,12 +1,11 @@
 """
-EAN-13 vonalkód ellenőrzése.
+EAN-13 vonalkód validálás
 """
 
 
 def is_valid_ean13(code: str) -> bool:
-    """Igaz, ha a *code* érvényes EAN-13 vonalkód.
-
-    Az érvényes kód pontosan 13 ASCII számjegy, amelynek utolsó számjegye
+    """
+    Az érvényes kód pontosan 13 számjegy, amelynek utolsó számjegye
     megegyezik az első 12-ből számított EAN-13 ellenőrző számjeggyel. Betűt,
     szóközt, speciális karaktert tartalmazó, rossz hosszúságú vagy hibás
     ellenőrző számjegyű kód érvénytelen.

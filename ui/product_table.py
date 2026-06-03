@@ -1,12 +1,5 @@
 """
-Görgethető, szerkeszthető terméktáblázat.
-
-A ttk.Treeview nem tud soronkénti gombokat tartani, sem egyetlen cellát
-letiltani, ezért a munkamenet listáját egyedi sorokként rajzoljuk egy
-görgethető vászonra. Minden sorban beágyazott mínusz / plusz mennyiséggomb
-található (a mínusz 1-es mennyiségnél le van tiltva) és egy piros törlés gomb.
-A csak olvasható cellák tk.Label-ek, hogy az aktív sort kiemelhessük; a
-vezérlők natív ttk.Button-ök.
+Görgethető, szerkeszthető terméklista.
 """
 import tkinter as tk
 from tkinter import ttk
@@ -27,10 +20,10 @@ _WIDTHS = [w for _, w, _ in _COLUMNS]
 _TOTAL_WIDTH = sum(_WIDTHS)
 _NAME_MAX_CHARS = 44
 
-_LINE_BG = "#dcdcdc"        # a vászon/belső háttér, rácsvonalként látszik át
+_LINE_BG = "#dcdcdc"        # belső háttérszín
 _HEADER_BG = "#f3f3f3"
 _ROW_BG = "#ffffff"
-_ROW_HIGHLIGHT_BG = "#d4f4d7"  # világoszöld a legutóbb beolvasott sorhoz
+_ROW_HIGHLIGHT_BG = "#d4f4d7"  # sor kiemelés az utolsó szkennelt termékhez
 
 
 def _truncate(text: str) -> str:
@@ -48,7 +41,7 @@ class _Row:
         self.price = price
         self.time = time
         self.minus = minus
-        self.labels = labels  # tk.Label-ek, amelyek háttere kiemeléskor változik
+        self.labels = labels  # tk.Label-ek, háttérszín kiemeléskor változik
 
 
 class ProductTable(ttk.Frame):
@@ -108,7 +101,7 @@ class ProductTable(ttk.Frame):
                 self._window, width=max(e.width, _TOTAL_WIDTH)
             ),
         )
-        # Görgetés egérgörgővel csak akkor, ha a mutató a táblázat felett van.
+        # Görgetés egérgörgővel csak akkor, ha a mutató a táblázat felett van
         self._canvas.bind("<Enter>", lambda e: self._canvas.bind_all("<MouseWheel>", self._on_wheel))
         self._canvas.bind("<Leave>", lambda e: self._canvas.unbind_all("<MouseWheel>"))
 
@@ -170,7 +163,7 @@ class ProductTable(ttk.Frame):
         self._order.remove(value)
         if self._highlight_value == value:
             self._highlight_value = None
-        # A megmaradt sorok újraszámozása és újrarácsozása a rés bezárásához.
+        # A megmaradt sorok újraszámozása
         for idx, val in enumerate(self._order):
             r = self._rows[val]
             r.frame.grid_configure(row=idx)

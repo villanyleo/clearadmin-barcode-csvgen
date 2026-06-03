@@ -1,5 +1,5 @@
 """
-Main application window.
+Fő ablaknézet
 """
 import os
 import sys
@@ -14,20 +14,18 @@ from ui.product_table import ProductTable
 
 
 class MainWindow(tk.Tk):
-    # Az utolsó beolvasás állapotszínei (alsó sor szövege).
-    COLOR_SUCCESS = "#1a7f37"  # zöld szöveg
-    COLOR_ERROR = "#cf222e"    # piros szöveg
-    COLOR_ROW_HIGHLIGHT = "#d4f4d7"  # világoszöld sorháttér az utolsó beolvasáshoz
+    # Állapotszínek
+    COLOR_SUCCESS = "#1a7f37" 
+    COLOR_ERROR = "#cf222e"  
+    COLOR_ROW_HIGHLIGHT = "#d4f4d7" # utolsó beolvasás kiemelése
 
-    # Kiemelőszín az aktív fül aláhúzásához (Windows 11 alap kék).
     COLOR_ACCENT = "#0067c0"
 
-    # Tartalék jelek, csak akkor, ha a PNG ikonok nem tölthetők be.
+    # Fallback ikonok, ha a PNG-k nem tölthetők be.
     FALLBACK_EDIT = "✎"
     FALLBACK_DELETE = "🗑"
 
-    # Beviteli mezők osztályai, amelyeknek el kell kapniuk a billentyűket a
-    # normál gépeléshez, hogy az olvasókezelő ne nyelje le (pl. átnevező ablak).
+    # Azok a beviteli mezők, amikre fókuszálva nem fogadunk el vonalkód bevitelt
     _TEXT_ENTRY_CLASSES = {"Entry", "TEntry", "TCombobox", "Text", "Spinbox"}
 
     def __init__(self):
@@ -39,15 +37,14 @@ class MainWindow(tk.Tk):
 
         self.style = ttk.Style(self)
         self._configure_styles()
-        # A natív téma keret-háttérszíne, hogy a fülkonténereink és az inaktív
-        # aláhúzások zökkenőmentesen illeszkedjenek.
+        # Natív téma háttérszíne
         self._tab_bg = self._safe_color(
             self.style.lookup("TFrame", "background"), "#f0f0f0"
         )
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
-        # CSV-ből betöltött termékkatalógus (minden munkamenet közös; None, amíg nincs betöltve).
+        # CSV-ből betöltött termékkatalógus
         self._catalog: Catalog | None = None
         self._csv_path: str | None = None  # legutóbb megnyitott CSV, indítások között megjegyezve
         self._price_var = tk.StringVar()
@@ -56,16 +53,16 @@ class MainWindow(tk.Tk):
         self._build_ui()
         self._bind_scanner_input()
 
-        # Az előző futás munkameneteinek és CSV-jének visszatöltése, vagy új kezdés.
+        # Utolsó sessionök visszatöltése, vagy új session
         if not self._restore_state():
             self._manager.start_session()
         self._on_session_changed()
 
-        # Mindent elment, amikor az ablak bezárul.
+        # Sessionök mentése
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------ #
-    #  Stílusok / erőforrások                                              #
+    #  Layout                                                            #
     # ------------------------------------------------------------------ #
 
     def _configure_styles(self):
@@ -97,7 +94,7 @@ class MainWindow(tk.Tk):
             try:
                 icons[key] = tk.PhotoImage(file=self._asset_path(fname))
             except tk.TclError:
-                pass  # visszaesés szöveges jelre
+                pass  # fallback szöveges ikonra
         return icons
 
     def _set_app_icon(self):
@@ -108,11 +105,11 @@ class MainWindow(tk.Tk):
             pass
 
     # ------------------------------------------------------------------ #
-    #  Felület felépítése                                                  #
+    #  UI felépítése                                                  #
     # ------------------------------------------------------------------ #
 
     def _build_ui(self):
-        # ── Felső eszköztár ──────────────────────────────────────────────
+        # ── Eszköztár ──────────────────────────────────────────────
         toolbar = ttk.Frame(self, padding=(8, 6))
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
@@ -131,8 +128,7 @@ class MainWindow(tk.Tk):
             side=tk.LEFT, padx=16
         )
 
-        # ── Jobb oldal: CSV katalógus + árlista választó ─────────────────
-        # Jobbról balra pakolva, így a vizuális sorrend: [Árlista betöltése…] [Ár:] [▾]
+        # ── Jobb oldal: árlista betöltése + árazás váltása ─────────────────
         self._price_combo = ttk.Combobox(
             toolbar, textvariable=self._price_var, state="disabled", width=14
         )
@@ -146,11 +142,11 @@ class MainWindow(tk.Tk):
         )
         self._btn_load.pack(side=tk.RIGHT)
 
-        # ── Munkamenet fülsor (mindig látható; munkamenetenként egy fül) ─
+        # ── Session infó, gombok ─
         self._tab_bar = tk.Frame(self, bg=self._tab_bg)
         self._tab_bar.pack(side=tk.TOP, fill=tk.X)
 
-        # ── Szerkeszthető terméktáblázat ─────────────────────────────────
+        # ── Terméklista ─────────────────────────────────
         table_frame = ttk.Frame(self, padding=(8, 6, 8, 8))
         table_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self._table = ProductTable(
@@ -176,7 +172,7 @@ class MainWindow(tk.Tk):
         self._scan_status_lbl.pack(side=tk.LEFT)
 
     # ------------------------------------------------------------------ #
-    #  Fülsor                                                              #
+    #  Session fülek                                                     #
     # ------------------------------------------------------------------ #
 
     def _rebuild_tab_bar(self):
@@ -211,7 +207,6 @@ class MainWindow(tk.Tk):
                 lambda s=session: self._on_delete_session(s)
             ).pack(side=tk.LEFT, padx=(0, 4))
 
-            # A kiemelő aláhúzás jelöli az aktív fület (Windows 11 stílus).
             underline = tk.Frame(
                 tab, height=2, bg=self.COLOR_ACCENT if is_active else self._tab_bg
             )
@@ -282,7 +277,7 @@ class MainWindow(tk.Tk):
             return "", ""
         return product.name, product.prices.get(self._price_var.get(), "")
 
-    # -- beágyazott mennyiség / termék szerkesztése --------------------- #
+    # -- beszkennelt termék mennyiség szerkesztése/törlése --------------------- #
 
     def _on_increment(self, value: str):
         session = self._manager.current
@@ -313,7 +308,7 @@ class MainWindow(tk.Tk):
         self._refresh_status()
 
     # ------------------------------------------------------------------ #
-    #  Munkamenet / fül visszahívások                                      #
+    #  Munkamenetek megtartása                                           #
     # ------------------------------------------------------------------ #
 
     def _restore_state(self) -> bool:
@@ -338,7 +333,7 @@ class MainWindow(tk.Tk):
                 except Exception:
                     self._catalog = None  # a fájl módosult/olvashatatlan — folytatás nélküle
         except Exception:
-            # Sérült/inkompatibilis állapot — inkább új kezdés, mint összeomlás.
+            # Sérült állapot -> új session
             self._manager = SessionManager()
             return False
         return self._manager.current is not None
@@ -378,7 +373,7 @@ class MainWindow(tk.Tk):
             return
         self._manager.delete_session(session)
         if self._manager.current is None:
-            # Soha ne maradjon nulla munkamenet — a fülsor maradjon kitöltve.
+            # soha ne legyen 0 session
             self._manager.start_session()
         self._scan_status_var.set("")
         self._on_session_changed()
@@ -398,7 +393,7 @@ class MainWindow(tk.Tk):
             name, price = self._catalog_fields(value)
             if not name:
                 unmatched += 1
-                name = value  # visszaesés a vonalkódra, hogy a tétel azonosítható maradjon
+                name = value  # vonalkód fallback, hogy azonosítható maradjon
             rows.append((name, price, count))
 
         if unmatched and not messagebox.askokcancel(
@@ -426,7 +421,7 @@ class MainWindow(tk.Tk):
             )
             return
 
-        # A munkamenet szándékosan érintetlen marad, hogy később még szerkeszthető legyen.
+        # a sessionhöz nem nyúlunk hogy később szerkeszthető maradjon
         self._set_scan_status(
             f"{len(rows)} tétel exportálva ide: {os.path.basename(path)}",
             success=True,
@@ -441,7 +436,7 @@ class MainWindow(tk.Tk):
             self._refresh_status()
             return
 
-        # A munkamenet árlistája az elsőre áll, ha van betöltött katalógus.
+        # a sessiont az első ártípusra állítja, ha van betöltött árlista
         if self._catalog and not session.price_type and self._catalog.price_names:
             session.price_type = self._catalog.price_names[0]
         self._price_var.set(session.price_type or "")
@@ -450,7 +445,7 @@ class MainWindow(tk.Tk):
         self._refresh_status()
 
     # ------------------------------------------------------------------ #
-    #  CSV katalógus visszahívások                                         #
+    #  Árlista betöltése                                                 #
     # ------------------------------------------------------------------ #
 
     def _on_load_csv(self):
@@ -484,7 +479,7 @@ class MainWindow(tk.Tk):
         )
 
     def _on_price_change(self, event=None):
-        # A kiválasztott árlista az aktív munkamenethez tartozik.
+        # A kiválasztott ártípus az aktív munkamenethez tartozik.
         session = self._manager.current
         if session is not None:
             session.price_type = self._price_var.get()
