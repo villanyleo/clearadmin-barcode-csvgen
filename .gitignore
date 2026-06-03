@@ -27,6 +27,9 @@ dist/
 installer_output/
 
 # ── Confidential data ────────────────────────────────────────────────
-# Product CSVs hold confidential VillanyLeó pricing — never commit them.
-# The app loads them at runtime via the file browser.
+# A valódi termék-CSV-k bizalmas VillanyLeó-árakat tartalmaznak — sosem kerülnek be.
 *.csv
+
+# A minta CSV-fájlok viszont igen: nincs bennük valódi adat, csak példák.
+!minta/termeklista.csv
+!minta/export_minta.csv
