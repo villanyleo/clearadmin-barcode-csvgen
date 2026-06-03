@@ -14,20 +14,20 @@ from ui.product_table import ProductTable
 
 
 class MainWindow(tk.Tk):
-    # Last-scan status colours (bottom bar text).
-    COLOR_SUCCESS = "#1a7f37"  # green text
-    COLOR_ERROR = "#cf222e"    # red text
-    COLOR_ROW_HIGHLIGHT = "#d4f4d7"  # light-green row background for last scan
+    # Az utolsó beolvasás állapotszínei (alsó sor szövege).
+    COLOR_SUCCESS = "#1a7f37"  # zöld szöveg
+    COLOR_ERROR = "#cf222e"    # piros szöveg
+    COLOR_ROW_HIGHLIGHT = "#d4f4d7"  # világoszöld sorháttér az utolsó beolvasáshoz
 
-    # Accent for the active-tab underline (Windows 11 default blue).
+    # Kiemelőszín az aktív fül aláhúzásához (Windows 11 alap kék).
     COLOR_ACCENT = "#0067c0"
 
-    # Fallback glyphs used only if the PNG icons cannot be loaded.
+    # Tartalék jelek, csak akkor, ha a PNG ikonok nem tölthetők be.
     FALLBACK_EDIT = "✎"
     FALLBACK_DELETE = "🗑"
 
-    # Widget classes that should receive keystrokes for normal typing, so the
-    # scanner handler doesn't swallow text entry (e.g. the rename dialog).
+    # Beviteli mezők osztályai, amelyeknek el kell kapniuk a billentyűket a
+    # normál gépeléshez, hogy az olvasókezelő ne nyelje le (pl. átnevező ablak).
     _TEXT_ENTRY_CLASSES = {"Entry", "TEntry", "TCombobox", "Text", "Spinbox"}
 
     def __init__(self):
@@ -39,33 +39,33 @@ class MainWindow(tk.Tk):
 
         self.style = ttk.Style(self)
         self._configure_styles()
-        # Background colour the native theme uses for frames, so our tab
-        # containers and inactive underlines blend in seamlessly.
+        # A natív téma keret-háttérszíne, hogy a fülkonténereink és az inaktív
+        # aláhúzások zökkenőmentesen illeszkedjenek.
         self._tab_bg = self._safe_color(
             self.style.lookup("TFrame", "background"), "#f0f0f0"
         )
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
-        # Product catalog loaded from a CSV (shared by all sessions; None until loaded).
+        # CSV-ből betöltött termékkatalógus (minden munkamenet közös; None, amíg nincs betöltve).
         self._catalog: Catalog | None = None
-        self._csv_path: str | None = None  # last opened CSV, remembered across runs
+        self._csv_path: str | None = None  # legutóbb megnyitott CSV, indítások között megjegyezve
         self._price_var = tk.StringVar()
         self._icons = self._load_icons()
 
         self._build_ui()
         self._bind_scanner_input()
 
-        # Restore the previous run's sessions and CSV, or start fresh.
+        # Az előző futás munkameneteinek és CSV-jének visszatöltése, vagy új kezdés.
         if not self._restore_state():
             self._manager.start_session()
         self._on_session_changed()
 
-        # Persist everything when the window is closed.
+        # Mindent elment, amikor az ablak bezárul.
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------ #
-    #  Styling / assets                                                    #
+    #  Stílusok / erőforrások                                              #
     # ------------------------------------------------------------------ #
 
     def _configure_styles(self):
@@ -78,14 +78,14 @@ class MainWindow(tk.Tk):
     def _safe_color(self, color, fallback):
         try:
             if color:
-                self.winfo_rgb(color)  # raises TclError if not a usable colour
+                self.winfo_rgb(color)  # TclError-t dob, ha nem használható szín
                 return color
         except tk.TclError:
             pass
         return fallback
 
     def _asset_path(self, name: str) -> str:
-        # When frozen by PyInstaller, assets are unpacked under sys._MEIPASS.
+        # PyInstaller-rel csomagolva az erőforrások a sys._MEIPASS alatt vannak kicsomagolva.
         base = getattr(sys, "_MEIPASS", None) or os.path.dirname(
             os.path.dirname(os.path.abspath(__file__))
         )
@@ -97,7 +97,7 @@ class MainWindow(tk.Tk):
             try:
                 icons[key] = tk.PhotoImage(file=self._asset_path(fname))
             except tk.TclError:
-                pass  # fall back to a text glyph
+                pass  # visszaesés szöveges jelre
         return icons
 
     def _set_app_icon(self):
@@ -108,11 +108,11 @@ class MainWindow(tk.Tk):
             pass
 
     # ------------------------------------------------------------------ #
-    #  UI construction                                                     #
+    #  Felület felépítése                                                  #
     # ------------------------------------------------------------------ #
 
     def _build_ui(self):
-        # ── Top toolbar ──────────────────────────────────────────────────
+        # ── Felső eszköztár ──────────────────────────────────────────────
         toolbar = ttk.Frame(self, padding=(8, 6))
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
@@ -121,21 +121,18 @@ class MainWindow(tk.Tk):
         )
         self._btn_start.pack(side=tk.LEFT, padx=(0, 6))
 
-        self._btn_reset = ttk.Button(toolbar, text="Visszaállítás", command=self._on_reset)
-        self._btn_reset.pack(side=tk.LEFT)
-
         self._btn_export = ttk.Button(
             toolbar, text="Mentés", command=self._on_export
         )
-        self._btn_export.pack(side=tk.LEFT, padx=(6, 0))
+        self._btn_export.pack(side=tk.LEFT)
 
         self._status_var = tk.StringVar(value="")
         ttk.Label(toolbar, textvariable=self._status_var, anchor=tk.W).pack(
             side=tk.LEFT, padx=16
         )
 
-        # ── Right side: CSV catalog + price-list selector ────────────────
-        # Packed right-to-left, so the visual order is: [Load CSV…] [Price:] [▾]
+        # ── Jobb oldal: CSV katalógus + árlista választó ─────────────────
+        # Jobbról balra pakolva, így a vizuális sorrend: [Árlista betöltése…] [Ár:] [▾]
         self._price_combo = ttk.Combobox(
             toolbar, textvariable=self._price_var, state="disabled", width=14
         )
@@ -149,11 +146,11 @@ class MainWindow(tk.Tk):
         )
         self._btn_load.pack(side=tk.RIGHT)
 
-        # ── Session tab bar (always visible; one tab per open session) ───
+        # ── Munkamenet fülsor (mindig látható; munkamenetenként egy fül) ─
         self._tab_bar = tk.Frame(self, bg=self._tab_bg)
         self._tab_bar.pack(side=tk.TOP, fill=tk.X)
 
-        # ── Editable product table ───────────────────────────────────────
+        # ── Szerkeszthető terméktáblázat ─────────────────────────────────
         table_frame = ttk.Frame(self, padding=(8, 6, 8, 8))
         table_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self._table = ProductTable(
@@ -166,7 +163,7 @@ class MainWindow(tk.Tk):
         )
         self._table.pack(fill=tk.BOTH, expand=True)
 
-        # ── Bottom status bar (last-scan result) ─────────────────────────
+        # ── Alsó állapotsor (utolsó beolvasás eredménye) ─────────────────
         self._scan_status_var = tk.StringVar(value="")
         bottom = ttk.Frame(self, padding=(8, 2, 8, 4))
         bottom.pack(side=tk.BOTTOM, fill=tk.X)
@@ -179,7 +176,7 @@ class MainWindow(tk.Tk):
         self._scan_status_lbl.pack(side=tk.LEFT)
 
     # ------------------------------------------------------------------ #
-    #  Tab bar                                                             #
+    #  Fülsor                                                              #
     # ------------------------------------------------------------------ #
 
     def _rebuild_tab_bar(self):
@@ -214,7 +211,7 @@ class MainWindow(tk.Tk):
                 lambda s=session: self._on_delete_session(s)
             ).pack(side=tk.LEFT, padx=(0, 4))
 
-            # Accent underline marks the active tab (Windows 11 style).
+            # A kiemelő aláhúzás jelöli az aktív fület (Windows 11 stílus).
             underline = tk.Frame(
                 tab, height=2, bg=self.COLOR_ACCENT if is_active else self._tab_bg
             )
@@ -232,15 +229,15 @@ class MainWindow(tk.Tk):
         )
 
     # ------------------------------------------------------------------ #
-    #  Scanner input handling                                              #
+    #  Olvasó bemenetének kezelése                                         #
     # ------------------------------------------------------------------ #
 
     def _bind_scanner_input(self):
-        """Capture all key presses regardless of which widget has focus."""
+        """Minden billentyűleütés elkapása, függetlenül attól, melyik elemen van a fókusz."""
         self.bind_all("<Key>", self._on_key)
 
     def _on_key(self, event):
-        # Let normal typing through when a text field (e.g. the rename dialog) is focused.
+        # Engedi a normál gépelést, ha beviteli mező (pl. az átnevező ablak) van fókuszban.
         focus = self.focus_get()
         if focus is not None and focus.winfo_class() in self._TEXT_ENTRY_CLASSES:
             return
@@ -257,7 +254,7 @@ class MainWindow(tk.Tk):
             self._input_buffer.append(event.char)
 
     def _handle_scan(self, code: str):
-        """Validate a scanned code, then give audio + visual feedback."""
+        """Beolvasott kód ellenőrzése, majd hangos + vizuális visszajelzés."""
         if is_valid_ean13(code):
             self._register_barcode(code)
             self._set_scan_status(f"{code} beolvasva", success=True)
@@ -277,7 +274,7 @@ class MainWindow(tk.Tk):
         self._refresh_status()
 
     def _catalog_fields(self, value: str) -> tuple[str, str]:
-        """Return (name, price) for *value* from the loaded catalog, or blanks."""
+        """A *value* (name, price) párját adja a betöltött katalógusból, vagy üreset."""
         if self._catalog is None:
             return "", ""
         product = self._catalog.get(value)
@@ -285,7 +282,7 @@ class MainWindow(tk.Tk):
             return "", ""
         return product.name, product.prices.get(self._price_var.get(), "")
 
-    # -- inline quantity / product editing ------------------------------ #
+    # -- beágyazott mennyiség / termék szerkesztése --------------------- #
 
     def _on_increment(self, value: str):
         session = self._manager.current
@@ -316,11 +313,11 @@ class MainWindow(tk.Tk):
         self._refresh_status()
 
     # ------------------------------------------------------------------ #
-    #  Session / tab callbacks                                             #
+    #  Munkamenet / fül visszahívások                                      #
     # ------------------------------------------------------------------ #
 
     def _restore_state(self) -> bool:
-        """Reload the previous run's sessions + CSV. Returns True if anything restored."""
+        """Visszatölti az előző futás munkameneteit + CSV-jét. True, ha visszaállt valami."""
         state = persistence.load_state()
         if not state:
             return False
@@ -339,9 +336,9 @@ class MainWindow(tk.Tk):
                         values=self._catalog.price_names, state="readonly"
                     )
                 except Exception:
-                    self._catalog = None  # file changed/unreadable — carry on without it
+                    self._catalog = None  # a fájl módosult/olvashatatlan — folytatás nélküle
         except Exception:
-            # Corrupt/incompatible state — start fresh rather than crash.
+            # Sérült/inkompatibilis állapot — inkább új kezdés, mint összeomlás.
             self._manager = SessionManager()
             return False
         return self._manager.current is not None
@@ -381,18 +378,10 @@ class MainWindow(tk.Tk):
             return
         self._manager.delete_session(session)
         if self._manager.current is None:
-            # Never leave zero sessions — keep the tab row populated.
+            # Soha ne maradjon nulla munkamenet — a fülsor maradjon kitöltve.
             self._manager.start_session()
         self._scan_status_var.set("")
         self._on_session_changed()
-
-    def _on_reset(self):
-        if self._manager.current is None:
-            return
-        self._manager.reset_session()
-        self._populate_table_from_session(self._manager.current)
-        self._scan_status_var.set("")
-        self._refresh_status()
 
     def _on_export(self):
         session = self._manager.current
@@ -402,14 +391,14 @@ class MainWindow(tk.Tk):
             )
             return
 
-        # Build rows in the same order as the table: (name, price, quantity).
+        # A sorok a táblázattal azonos sorrendben: (name, price, quantity).
         rows = []
         unmatched = 0
         for value, count, _last_ts in session.aggregated():
             name, price = self._catalog_fields(value)
             if not name:
                 unmatched += 1
-                name = value  # fall back to the barcode so the item is still identifiable
+                name = value  # visszaesés a vonalkódra, hogy a tétel azonosítható maradjon
             rows.append((name, price, count))
 
         if unmatched and not messagebox.askokcancel(
@@ -437,14 +426,14 @@ class MainWindow(tk.Tk):
             )
             return
 
-        # The session is intentionally left intact so it can still be edited later.
+        # A munkamenet szándékosan érintetlen marad, hogy később még szerkeszthető legyen.
         self._set_scan_status(
             f"{len(rows)} tétel exportálva ide: {os.path.basename(path)}",
             success=True,
         )
 
     def _on_session_changed(self):
-        """Sync the whole UI to the currently active session."""
+        """A teljes felület szinkronizálása az éppen aktív munkamenethez."""
         self._rebuild_tab_bar()
         session = self._manager.current
         if session is None:
@@ -452,7 +441,7 @@ class MainWindow(tk.Tk):
             self._refresh_status()
             return
 
-        # Default this session's price list to the first one if a catalog is loaded.
+        # A munkamenet árlistája az elsőre áll, ha van betöltött katalógus.
         if self._catalog and not session.price_type and self._catalog.price_names:
             session.price_type = self._catalog.price_names[0]
         self._price_var.set(session.price_type or "")
@@ -461,7 +450,7 @@ class MainWindow(tk.Tk):
         self._refresh_status()
 
     # ------------------------------------------------------------------ #
-    #  CSV catalog callbacks                                               #
+    #  CSV katalógus visszahívások                                         #
     # ------------------------------------------------------------------ #
 
     def _on_load_csv(self):
@@ -495,14 +484,14 @@ class MainWindow(tk.Tk):
         )
 
     def _on_price_change(self, event=None):
-        # The chosen price list belongs to the active session.
+        # A kiválasztott árlista az aktív munkamenethez tartozik.
         session = self._manager.current
         if session is not None:
             session.price_type = self._price_var.get()
         self._refresh_catalog_columns()
 
     def _refresh_catalog_columns(self):
-        """Update the Name and Price cells of every row from the loaded catalog."""
+        """Minden sor Terméknév és Ár cellájának frissítése a betöltött katalógusból."""
         if self._catalog is None:
             return
         for value in self._table.values():
@@ -510,14 +499,14 @@ class MainWindow(tk.Tk):
             self._table.update_cells(value, name, price)
 
     # ------------------------------------------------------------------ #
-    #  Helpers                                                             #
+    #  Segédfüggvények                                                     #
     # ------------------------------------------------------------------ #
 
     def _clear_table(self):
         self._table.clear()
 
     def _populate_table_from_session(self, session: Session):
-        """Rebuild the table to show *session*'s scans (used on tab switch / reset)."""
+        """A táblázat újraépítése a *session* beolvasásaival (fülváltáskor használt)."""
         rows = []
         for value, count, last_ts in session.aggregated():
             name, price = self._catalog_fields(value)
@@ -535,7 +524,7 @@ class MainWindow(tk.Tk):
             self._table.highlight(last)
 
     def _set_scan_status(self, text: str, success: bool):
-        """Show the last-scan result in the bottom bar, colour-coded."""
+        """Az utolsó beolvasás eredménye az alsó sorban, színkóddal."""
         self._scan_status_var.set(text)
         self._scan_status_lbl.configure(
             foreground=self.COLOR_SUCCESS if success else self.COLOR_ERROR

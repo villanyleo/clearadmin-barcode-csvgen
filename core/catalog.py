@@ -1,14 +1,14 @@
 """
-Product catalog loaded from a CSV file.
+CSV-fájlból betöltött termékkatalógus.
 
-Expected schema:
-    column 1 = "ean"  — the EAN-13 barcode
-    column 2 = "name" — the product name
-    every further column with a non-empty header is a named price list
-    (e.g. Kisker, Nagyker, VIP, Export)
+Várt séma:
+    1. oszlop = "ean"  — az EAN-13 vonalkód
+    2. oszlop = "name" — a termék neve
+    minden további, nem üres fejlécű oszlop egy elnevezett árlista
+    (pl. Kisker, Nagyker, VIP, Export)
 
-The file may carry a UTF-8 BOM and a stray trailing empty column; both are
-handled here. If the same EAN appears on several rows, the first one wins.
+A fájl tartalmazhat UTF-8 BOM-ot és egy felesleges, üres záró oszlopot; mindkettőt
+itt kezeljük. Ha ugyanaz az EAN több sorban szerepel, az első nyer.
 """
 import csv
 from dataclasses import dataclass
@@ -18,12 +18,12 @@ from typing import Dict, List, Optional
 @dataclass
 class Product:
     name: str
-    prices: Dict[str, str]  # price-list name -> price as it appears in the CSV
+    prices: Dict[str, str]  # árlista neve -> ár, ahogy a CSV-ben szerepel
 
 
 class Catalog:
     def __init__(self, price_names: List[str], products: Dict[str, Product]):
-        self.price_names = price_names      # ordered list of price-list names
+        self.price_names = price_names      # az árlisták neve, sorrendben
         self._products = products
 
     def get(self, ean: str) -> Optional[Product]:
@@ -34,15 +34,15 @@ class Catalog:
 
 
 def load_catalog(path: str) -> Catalog:
-    """Read *path* and return a Catalog. Raises on unreadable/empty files."""
+    """Beolvassa a *path* fájlt és Catalog-ot ad vissza. Hibát dob üres/olvashatatlan fájlnál."""
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         try:
             header = next(reader)
         except StopIteration:
-            raise ValueError("The CSV file is empty.")
+            raise ValueError("A CSV-fájl üres.")
 
-        # Price columns: everything after ean/name that has a non-empty header.
+        # Ároszlopok: minden az ean/name után, aminek nem üres a fejléce.
         price_cols = [
             (i, name.strip())
             for i, name in enumerate(header[2:], start=2)
@@ -56,7 +56,7 @@ def load_catalog(path: str) -> Catalog:
                 continue
             ean = row[0].strip()
             if ean in products:
-                continue  # first occurrence wins
+                continue  # az első előfordulás nyer
             name = row[1].strip() if len(row) > 1 else ""
             prices = {
                 pname: (row[i].strip() if i < len(row) else "")

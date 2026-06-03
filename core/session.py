@@ -1,5 +1,5 @@
 """
-Session and barcode data management.
+Munkamenet- és vonalkódadatok kezelése.
 """
 from collections import Counter
 from dataclasses import dataclass, field
@@ -12,7 +12,7 @@ class BarcodeEntry:
     value: str
     timestamp: datetime
     session_id: int
-    sequence: int  # within the session
+    sequence: int  # a munkameneten belül
 
 
 @dataclass
@@ -20,7 +20,7 @@ class Session:
     id: int
     started_at: datetime
     name: str = ""
-    price_type: Optional[str] = None  # selected price list for this session
+    price_type: Optional[str] = None  # a munkamenethez választott árlista
     entries: List[BarcodeEntry] = field(default_factory=list)
     _counts: Counter = field(default_factory=Counter, repr=False)
 
@@ -36,20 +36,15 @@ class Session:
         return entry
 
     def count_for(self, value: str) -> int:
-        """How many times *value* has been scanned in this session."""
+        """Hányszor olvasták be a *value* kódot ebben a munkamenetben."""
         return self._counts[value]
 
-    def clear_entries(self) -> None:
-        """Drop all scans (used by Reset) while keeping the session active."""
-        self.entries.clear()
-        self._counts.clear()
-
     def increment(self, value: str) -> None:
-        """Manually bump a product's quantity by one (like an extra scan)."""
+        """Egy termék mennyiségének kézi növelése eggyel (mint egy plusz beolvasás)."""
         self.add_barcode(value)
 
     def decrement(self, value: str) -> None:
-        """Manually lower a product's quantity by one (never below one)."""
+        """Egy termék mennyiségének kézi csökkentése eggyel (sosem egy alá)."""
         if self._counts.get(value, 0) <= 1:
             return
         for i in range(len(self.entries) - 1, -1, -1):
@@ -59,12 +54,12 @@ class Session:
         self._counts[value] -= 1
 
     def remove_product(self, value: str) -> None:
-        """Remove a product from the session entirely."""
+        """Egy termék teljes eltávolítása a munkamenetből."""
         self.entries = [e for e in self.entries if e.value != value]
         self._counts.pop(value, None)
 
     def aggregated(self):
-        """Unique barcodes in first-scan order as (value, count, last_timestamp)."""
+        """Egyedi vonalkódok az első beolvasás sorrendjében: (value, count, last_timestamp)."""
         order: List[str] = []
         last_ts = {}
         for e in self.entries:
@@ -74,14 +69,14 @@ class Session:
         return [(v, self._counts[v], last_ts[v]) for v in order]
 
     def last_value(self) -> Optional[str]:
-        """The barcode of the most recent scan, or None if the session is empty."""
+        """A legutóbb beolvasott vonalkód, vagy None, ha a munkamenet üres."""
         return self.entries[-1].value if self.entries else None
 
     @property
     def count(self) -> int:
         return len(self.entries)
 
-    # -- serialization (for saving/restoring on exit) ------------------- #
+    # -- szerializáció (kilépéskori mentéshez/visszatöltéshez) ---------- #
 
     def to_dict(self) -> dict:
         return {
@@ -135,11 +130,11 @@ class SessionManager:
 
     @property
     def sessions(self) -> List[Session]:
-        """All open sessions, in creation order."""
+        """Az összes nyitott munkamenet, létrehozási sorrendben."""
         return list(self._sessions)
 
     def _next_default_name(self) -> str:
-        """Lowest 'Munkamenet N' not currently used by an open session."""
+        """A legkisebb 'Munkamenet N', amelyet épp nem használ nyitott munkamenet."""
         existing = {s.name for s in self._sessions}
         n = 1
         while f"Munkamenet {n}" in existing:
@@ -147,8 +142,8 @@ class SessionManager:
         return f"Munkamenet {n}"
 
     def start_session(self) -> Session:
-        # id stays a monotonic, never-reused identity; the display name reuses
-        # the lowest free "Session N" slot among the currently open sessions.
+        # az id monoton, soha újra nem használt azonosító; a megjelenített név a
+        # nyitott munkamenetek közül a legkisebb szabad "Munkamenet N" helyet veszi.
         self._session_counter += 1
         session = Session(
             id=self._session_counter,
@@ -160,13 +155,13 @@ class SessionManager:
         return session
 
     def select_session(self, session: Session) -> None:
-        """Make *session* the active one."""
+        """A *session* munkamenetet teszi aktívvá."""
         if session in self._sessions:
             self._current = session
 
     def delete_session(self, session: Session) -> Optional[Session]:
-        """Remove *session*. If it was active, activate a neighbour. Returns the
-        new active session (or None if none remain)."""
+        """Eltávolítja a *session* munkamenetet. Ha aktív volt, egy szomszédot aktivál.
+        Az új aktív munkamenetet adja vissza (vagy None-t, ha nem maradt)."""
         if session not in self._sessions:
             return self._current
         idx = self._sessions.index(session)
@@ -177,11 +172,6 @@ class SessionManager:
             else:
                 self._current = None
         return self._current
-
-    def reset_session(self):
-        """Clear current session entries (keeps session active, just clears table)."""
-        if self._current is not None:
-            self._current.clear_entries()
 
     def stop_session(self):
         self._current = None
@@ -196,7 +186,7 @@ class SessionManager:
             return []
         return list(self._current.entries)
 
-    # -- serialization (for saving/restoring on exit) ------------------- #
+    # -- szerializáció (kilépéskori mentéshez/visszatöltéshez) ---------- #
 
     def to_dict(self) -> dict:
         return {
@@ -206,7 +196,8 @@ class SessionManager:
         }
 
     def load_state(self, data: dict) -> Optional[Session]:
-        """Replace all sessions from *data*. Returns the restored active session."""
+        """A *data* alapján lecseréli az összes munkamenetet. A visszatöltött aktív
+        munkamenetet adja vissza."""
         self._sessions = [Session.from_dict(s) for s in data.get("sessions", [])]
         self._session_counter = data.get("session_counter", len(self._sessions))
         self._current = None

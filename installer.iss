@@ -1,6 +1,6 @@
-; Inno Setup script for ClearAdmin CSV vonalkód olvasó.
-; Wraps the PyInstaller-built executable into a Windows Setup.exe installer.
-; AppVersion is supplied on the command line via /DAppVersion=... by the CI workflow.
+; Inno Setup szkript a ClearAdmin CSV vonalkód olvasóhoz.
+; A PyInstaller által épített futtatható fájlt Windows Setup.exe telepítőbe csomagolja.
+; Az AppVersion értékét a CI munkafolyamat adja át a parancssorban: /DAppVersion=...
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"

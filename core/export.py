@@ -1,11 +1,11 @@
 """
-Export a session to the import CSV format expected by the accounting system.
+Munkamenet exportálása a számlázó szoftver által várt import CSV formátumba.
 
-The format is fixed and must match what the importer reads exactly:
-    * comma-delimited, CRLF line endings, no BOM
-    * encoded as Mac OS Central European (mac_latin2)
-    * header: termeknev, ar, afakod, mennyiseg, egyseg
-    * afakod is always "27" and egyseg is always "db"
+A formátum kötött, és pontosan meg kell egyeznie azzal, amit az importáló beolvas:
+    * vesszővel tagolt, CRLF sorvégek, BOM nélkül
+    * Mac OS közép-európai (mac_latin2) kódolás
+    * fejléc: termeknev, ar, afakod, mennyiseg, egyseg
+    * az afakod mindig "27", az egyseg mindig "db"
 """
 import csv
 
@@ -16,10 +16,10 @@ UNIT = "db"
 
 
 def write_export(path: str, rows) -> None:
-    """Write *rows* (iterable of (name, price, quantity)) to *path*.
+    """A *rows* sorokat (name, price, quantity hármasok) a *path* fájlba írja.
 
-    csv.writer already uses a comma delimiter and a '\\r\\n' line terminator,
-    matching the importer's expected format.
+    A csv.writer alapból vesszős elválasztót és '\\r\\n' sorvéget használ, ami
+    megfelel az importáló által várt formátumnak.
     """
     with open(path, "w", newline="", encoding=EXPORT_ENCODING, errors="replace") as f:
         writer = csv.writer(f)

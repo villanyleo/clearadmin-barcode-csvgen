@@ -1,7 +1,7 @@
-name: Build Windows installer
+name: Windows telepítő készítése
 
-# Build the .exe + installer on every push (validates the build),
-# and publish a GitHub Release whenever a version tag like v0.0.1 is pushed.
+# Minden push-nál megépíti az .exe-t + a telepítőt (ellenőrzi a buildet),
+# és GitHub Release-t tesz közzé, ha egy verziócímke (pl. v0.0.1) érkezik.
 on:
   push:
     branches:
@@ -11,29 +11,29 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # required to create Releases
+  contents: write  # a Release-ek létrehozásához szükséges
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-      - name: Check out source
+      - name: Forrás letöltése
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Python beállítása
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install build dependencies
+      - name: Build függőségek telepítése
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          # Install project requirements if present (app currently uses only the stdlib).
+          # Projektfüggőségek telepítése, ha vannak (jelenleg csak a beépített modulokat használja).
           if (Test-Path requirements.txt) { pip install -r requirements.txt }
 
-      - name: Build executable with PyInstaller
+      - name: Futtatható fájl építése PyInstallerrel
         run: >
           pyinstaller
           --noconfirm
@@ -45,39 +45,39 @@ jobs:
           --add-data "assets;assets"
           main.py
 
-      - name: Derive version string
+      - name: Verziószám meghatározása
         id: version
         shell: bash
         run: |
-          # On a tag push, use the tag (strip the leading "v"); otherwise a dev build number.
+          # Címke push-nál a címkét használjuk (a kezdő „v” levágva); egyébként dev build szám.
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
             echo "value=0.0.0-dev.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build installer with Inno Setup
+      - name: Telepítő építése Inno Setuppal
         run: >
           iscc
           /DAppVersion=${{ steps.version.outputs.value }}
           installer.iss
 
-      - name: Upload installer artifact
+      - name: Telepítő artifact feltöltése
         uses: actions/upload-artifact@v4
         with:
           name: ClearAdmin-CSV-vonalkod-olvaso-Setup
           path: installer_output/*.exe
           if-no-files-found: error
 
-      - name: Upload standalone executable artifact
+      - name: Önálló futtatható fájl artifact feltöltése
         uses: actions/upload-artifact@v4
         with:
           name: ClearAdmin-CSV-vonalkod-olvaso-exe
           path: "dist/ClearAdmin-CSV-vonalkod-olvaso.exe"
           if-no-files-found: error
 
-      # ── Publish a Release only when a version tag is pushed ──────────
-      - name: Publish GitHub Release
+      # ── Release közzététele csak akkor, ha verziócímke érkezik ──────
+      - name: GitHub Release közzététele
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:

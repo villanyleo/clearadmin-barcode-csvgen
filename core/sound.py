@@ -1,24 +1,25 @@
 """
-Audio feedback for scan results.
+Hangos visszajelzés a beolvasás eredményéről.
 
-Tones are generated with winsound (Windows stdlib) so there are no audio files
-to bundle and the pitch/length is fully tunable. Playback runs on a daemon
-thread so rapid scanning never blocks the UI. On non-Windows platforms (e.g.
-development on macOS) playback is a silent no-op.
+A hangokat a winsound (Windows beépített modul) állítja elő, így nincs
+becsomagolandó hangfájl, a magasság és a hossz pedig szabadon hangolható. A
+lejátszás daemon szálon fut, így a gyors beolvasás soha nem akasztja meg a
+felületet. Nem Windows rendszereken (pl. macOS fejlesztés alatt) a lejátszás
+csendben nem csinál semmit.
 """
 import threading
 
 try:
     import winsound
     _HAS_WINSOUND = True
-except ImportError:  # not on Windows
+except ImportError:  # nem Windows rendszeren
     _HAS_WINSOUND = False
 
 
-# Short, bright, unobtrusive — heard on every successful scan, so it stays brief.
+# Rövid, magas, nem zavaró — minden sikeres beolvasásnál hallható, ezért rövid.
 _SUCCESS = [(1000, 70)]
 
-# Lower, descending two-tone buzz — rare and deliberately attention-grabbing.
+# Mélyebb, leszálló kéthangú zümmögés — ritka és szándékosan figyelemfelkeltő.
 _ERROR = [(400, 150), (250, 150)]
 
 

@@ -1,35 +1,36 @@
 """
-Scrollable, editable product table.
+Görgethető, szerkeszthető terméktáblázat.
 
-ttk.Treeview cannot host per-row buttons or disable a single cell, so the
-session list is drawn as custom rows inside a scrollable canvas. Each row has
-inline minus / plus quantity buttons (minus is disabled at quantity 1) and a
-red delete button. Read-only cells are tk.Labels so the active row can be
-highlighted; the controls are native ttk.Buttons.
+A ttk.Treeview nem tud soronkénti gombokat tartani, sem egyetlen cellát
+letiltani, ezért a munkamenet listáját egyedi sorokként rajzoljuk egy
+görgethető vászonra. Minden sorban beágyazott mínusz / plusz mennyiséggomb
+található (a mínusz 1-es mennyiségnél le van tiltva) és egy piros törlés gomb.
+A csak olvasható cellák tk.Label-ek, hogy az aktív sort kiemelhessük; a
+vezérlők natív ttk.Button-ök.
 """
 import tkinter as tk
 from tkinter import ttk
 
-# (header text, pixel width, anchor) for each column.
+# (fejléc szövege, pixel szélesség, igazítás) minden oszlophoz.
 _COLUMNS = [
     ("#", 36, tk.CENTER),
     ("Vonalkód", 110, tk.W),
     ("Terméknév", 300, tk.W),
-    ("", 30, tk.CENTER),       # minus button
+    ("", 30, tk.CENTER),       # mínusz gomb
     ("Darabszám", 44, tk.CENTER),
-    ("", 30, tk.CENTER),       # plus button
+    ("", 30, tk.CENTER),       # plusz gomb
     ("Egységár (nettó)", 84, tk.E),
     ("Idő", 84, tk.CENTER),
-    ("", 40, tk.CENTER),       # delete button
+    ("", 40, tk.CENTER),       # törlés gomb
 ]
 _WIDTHS = [w for _, w, _ in _COLUMNS]
 _TOTAL_WIDTH = sum(_WIDTHS)
 _NAME_MAX_CHARS = 44
 
-_LINE_BG = "#dcdcdc"        # canvas/inner background, shows through as gridlines
+_LINE_BG = "#dcdcdc"        # a vászon/belső háttér, rácsvonalként látszik át
 _HEADER_BG = "#f3f3f3"
 _ROW_BG = "#ffffff"
-_ROW_HIGHLIGHT_BG = "#d4f4d7"  # light green for the last-scanned row
+_ROW_HIGHLIGHT_BG = "#d4f4d7"  # világoszöld a legutóbb beolvasott sorhoz
 
 
 def _truncate(text: str) -> str:
@@ -47,7 +48,7 @@ class _Row:
         self.price = price
         self.time = time
         self.minus = minus
-        self.labels = labels  # tk.Labels whose bg changes on highlight
+        self.labels = labels  # tk.Label-ek, amelyek háttere kiemeléskor változik
 
 
 class ProductTable(ttk.Frame):
@@ -60,7 +61,7 @@ class ProductTable(ttk.Frame):
         self._delete_icon = delete_icon
         self._delete_fallback = delete_fallback
 
-        self._order: list[str] = []       # barcode values in display order
+        self._order: list[str] = []       # vonalkódok megjelenítési sorrendben
         self._rows: dict[str, _Row] = {}
         self._highlight_value: str | None = None
 
@@ -71,7 +72,7 @@ class ProductTable(ttk.Frame):
         self._build()
 
     # ------------------------------------------------------------------ #
-    #  Construction                                                        #
+    #  Felépítés                                                          #
     # ------------------------------------------------------------------ #
 
     def _build(self):
@@ -107,7 +108,7 @@ class ProductTable(ttk.Frame):
                 self._window, width=max(e.width, _TOTAL_WIDTH)
             ),
         )
-        # Mouse-wheel scrolling only while the pointer is over the table.
+        # Görgetés egérgörgővel csak akkor, ha a mutató a táblázat felett van.
         self._canvas.bind("<Enter>", lambda e: self._canvas.bind_all("<MouseWheel>", self._on_wheel))
         self._canvas.bind("<Leave>", lambda e: self._canvas.unbind_all("<MouseWheel>"))
 
@@ -119,7 +120,7 @@ class ProductTable(ttk.Frame):
         self._canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
 
     # ------------------------------------------------------------------ #
-    #  Public API                                                          #
+    #  Nyilvános API                                                      #
     # ------------------------------------------------------------------ #
 
     def values(self) -> list[str]:
@@ -133,7 +134,7 @@ class ProductTable(ttk.Frame):
         self._highlight_value = None
 
     def set_rows(self, rows):
-        """rows: iterable of dicts with value/name/count/price/time."""
+        """rows: value/name/count/price/time kulcsú szótárak iterálható sorozata."""
         self.clear()
         for r in rows:
             self._append(r["value"], r["name"], r["count"], r["price"], r["time"])
@@ -169,7 +170,7 @@ class ProductTable(ttk.Frame):
         self._order.remove(value)
         if self._highlight_value == value:
             self._highlight_value = None
-        # Re-number and re-grid the remaining rows to close the gap.
+        # A megmaradt sorok újraszámozása és újrarácsozása a rés bezárásához.
         for idx, val in enumerate(self._order):
             r = self._rows[val]
             r.frame.grid_configure(row=idx)
@@ -189,7 +190,7 @@ class ProductTable(ttk.Frame):
         self._see(self._rows[value].frame)
 
     # ------------------------------------------------------------------ #
-    #  Internals                                                           #
+    #  Belső működés                                                      #
     # ------------------------------------------------------------------ #
 
     def _append(self, value, name, count, price, time):

@@ -1,8 +1,8 @@
 """
-Save and restore application state between runs.
+Az alkalmazás állapotának mentése és visszatöltése indítások között.
 
-State is stored as JSON in the per-user application-data directory, so it
-survives app restarts (and app updates / reinstalls of the .exe).
+Az állapot JSON-ként, a felhasználónkénti alkalmazásadat-könyvtárban tárolódik,
+így túléli az újraindításokat (és az .exe frissítését / újratelepítését).
 """
 import json
 import os
@@ -28,7 +28,7 @@ def state_file() -> Path:
 
 
 def load_state() -> dict | None:
-    """Return the saved state dict, or None if there is none / it is unreadable."""
+    """A mentett állapot szótárát adja vissza, vagy None-t, ha nincs / nem olvasható."""
     try:
         with open(state_file(), "r", encoding="utf-8") as f:
             return json.load(f)
@@ -37,13 +37,14 @@ def load_state() -> dict | None:
 
 
 def save_state(data: dict) -> None:
-    """Write *data* as JSON. Best-effort: never raises, so it can't block exit."""
+    """A *data* adatot JSON-ként írja ki. Legjobb szándékú: soha nem dob hibát,
+    így nem akadályozhatja a kilépést."""
     path = state_file()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)  # atomic replace
+        os.replace(tmp, path)  # atomi csere
     except OSError:
         pass
