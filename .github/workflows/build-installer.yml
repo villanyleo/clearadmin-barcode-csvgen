@@ -41,6 +41,7 @@ jobs:
           --onefile
           --windowed
           --name "HJC Barcode Scanner"
+          --add-data "assets;assets"
           main.py
 
       - name: Derive version string

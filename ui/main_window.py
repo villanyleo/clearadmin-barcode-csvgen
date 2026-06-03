@@ -2,6 +2,7 @@
 Main application window.
 """
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
@@ -17,17 +18,15 @@ class MainWindow(tk.Tk):
     COLOR_ERROR = "#cf222e"    # red text
     COLOR_ROW_HIGHLIGHT = "#d4f4d7"  # light-green row background for last scan
 
-    # Tab-bar colours.
-    COLOR_TAB_BAR_BG = "#bfbfbf"
-    COLOR_TAB_ACTIVE = "#ffffff"
-    COLOR_TAB_INACTIVE = "#dcdcdc"
+    # Accent for the active-tab underline (Windows 11 default blue).
+    COLOR_ACCENT = "#0067c0"
 
-    # Icon glyphs for the per-tab buttons.
-    ICON_EDIT = "✎"    # ✎ pencil
-    ICON_DELETE = "\U0001f5d1"  # 🗑 wastebasket
+    # Fallback glyphs used only if the PNG icons cannot be loaded.
+    FALLBACK_EDIT = "✎"
+    FALLBACK_DELETE = "🗑"
 
-    # Widget classes that should receive keystrokes for normal typing
-    # (so the scanner handler doesn't swallow text entry, e.g. rename dialog).
+    # Widget classes that should receive keystrokes for normal typing, so the
+    # scanner handler doesn't swallow text entry (e.g. the rename dialog).
     _TEXT_ENTRY_CLASSES = {"Entry", "TEntry", "TCombobox", "Text", "Spinbox"}
 
     def __init__(self):
@@ -35,6 +34,14 @@ class MainWindow(tk.Tk):
         self.title("HJC Barcode Scanner")
         self.geometry("980x600")
         self.minsize(820, 420)
+
+        self.style = ttk.Style(self)
+        self._configure_styles()
+        # Background colour the native theme uses for frames, so our tab
+        # containers and inactive underlines blend in seamlessly.
+        self._tab_bg = self._safe_color(
+            self.style.lookup("TFrame", "background"), "#f0f0f0"
+        )
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
@@ -45,10 +52,49 @@ class MainWindow(tk.Tk):
         # Product catalog loaded from a CSV (shared by all sessions; None until loaded).
         self._catalog: Catalog | None = None
         self._price_var = tk.StringVar()
+        self._icons = self._load_icons()
 
         self._build_ui()
         self._bind_scanner_input()
+        # Always start with one open session, so the tab row is shown from launch.
+        self._manager.start_session()
         self._on_session_changed()
+
+    # ------------------------------------------------------------------ #
+    #  Styling / assets                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _configure_styles(self):
+        self.style.configure("Tab.Toolbutton", font=("TkDefaultFont", 10), padding=(8, 3))
+        self.style.configure(
+            "TabActive.Toolbutton", font=("TkDefaultFont", 10, "bold"), padding=(8, 3)
+        )
+        self.style.configure("TabIcon.Toolbutton", padding=(3, 3))
+
+    def _safe_color(self, color, fallback):
+        try:
+            if color:
+                self.winfo_rgb(color)  # raises TclError if not a usable colour
+                return color
+        except tk.TclError:
+            pass
+        return fallback
+
+    def _asset_path(self, name: str) -> str:
+        # When frozen by PyInstaller, assets are unpacked under sys._MEIPASS.
+        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))
+        )
+        return os.path.join(base, "assets", name)
+
+    def _load_icons(self) -> dict:
+        icons = {}
+        for key, fname in (("edit", "edit.png"), ("delete", "delete.png")):
+            try:
+                icons[key] = tk.PhotoImage(file=self._asset_path(fname))
+            except tk.TclError:
+                pass  # fall back to a text glyph
+        return icons
 
     # ------------------------------------------------------------------ #
     #  UI construction                                                     #
@@ -60,16 +106,14 @@ class MainWindow(tk.Tk):
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
         self._btn_start = ttk.Button(
-            toolbar, text="Start session", command=self._on_start_session
+            toolbar, text="New session", command=self._on_start_session
         )
         self._btn_start.pack(side=tk.LEFT, padx=(0, 6))
 
-        self._btn_reset = ttk.Button(
-            toolbar, text="Reset", command=self._on_reset, state=tk.DISABLED
-        )
+        self._btn_reset = ttk.Button(toolbar, text="Reset", command=self._on_reset)
         self._btn_reset.pack(side=tk.LEFT)
 
-        self._status_var = tk.StringVar(value="No active session")
+        self._status_var = tk.StringVar(value="")
         ttk.Label(toolbar, textvariable=self._status_var, anchor=tk.W).pack(
             side=tk.LEFT, padx=16
         )
@@ -89,8 +133,8 @@ class MainWindow(tk.Tk):
         )
         self._btn_load.pack(side=tk.RIGHT)
 
-        # ── Session tab bar (one tab per open session) ───────────────────
-        self._tab_bar = tk.Frame(self, bg=self.COLOR_TAB_BAR_BG)
+        # ── Session tab bar (always visible; one tab per open session) ───
+        self._tab_bar = tk.Frame(self, bg=self._tab_bg)
         self._tab_bar.pack(side=tk.TOP, fill=tk.X)
 
         # ── Barcode table ────────────────────────────────────────────────
@@ -150,29 +194,47 @@ class MainWindow(tk.Tk):
         active = self._manager.current
         for session in self._manager.sessions:
             is_active = session is active
-            bg = self.COLOR_TAB_ACTIVE if is_active else self.COLOR_TAB_INACTIVE
 
-            tab = tk.Frame(self._tab_bar, bg=bg, bd=1, relief=tk.RAISED)
-            tab.pack(side=tk.LEFT, padx=(4, 0), pady=(4, 0))
+            tab = tk.Frame(self._tab_bar, bg=self._tab_bg)
+            tab.pack(side=tk.LEFT, padx=(6, 0), pady=(3, 0))
 
-            name_lbl = tk.Label(
-                tab,
+            row = tk.Frame(tab, bg=self._tab_bg)
+            row.pack(side=tk.TOP)
+
+            name_btn = ttk.Button(
+                row,
                 text=session.name,
-                bg=bg,
-                padx=8,
-                cursor="hand2",
-                font=("TkDefaultFont", 10, "bold" if is_active else "normal"),
+                style="TabActive.Toolbutton" if is_active else "Tab.Toolbutton",
+                command=lambda s=session: self._select_session(s),
             )
-            name_lbl.pack(side=tk.LEFT)
-            name_lbl.bind("<Button-1>", lambda e, s=session: self._select_session(s))
+            name_btn.pack(side=tk.LEFT)
 
-            edit_lbl = tk.Label(tab, text=self.ICON_EDIT, bg=bg, cursor="hand2", padx=2)
-            edit_lbl.pack(side=tk.LEFT)
-            edit_lbl.bind("<Button-1>", lambda e, s=session: self._on_rename_session(s))
+            self._make_icon_button(
+                row, "edit", self.FALLBACK_EDIT,
+                lambda s=session: self._on_rename_session(s)
+            ).pack(side=tk.LEFT)
 
-            del_lbl = tk.Label(tab, text=self.ICON_DELETE, bg=bg, cursor="hand2", padx=2)
-            del_lbl.pack(side=tk.LEFT, padx=(0, 6))
-            del_lbl.bind("<Button-1>", lambda e, s=session: self._on_delete_session(s))
+            self._make_icon_button(
+                row, "delete", self.FALLBACK_DELETE,
+                lambda s=session: self._on_delete_session(s)
+            ).pack(side=tk.LEFT, padx=(0, 4))
+
+            # Accent underline marks the active tab (Windows 11 style).
+            underline = tk.Frame(
+                tab, height=2, bg=self.COLOR_ACCENT if is_active else self._tab_bg
+            )
+            underline.pack(side=tk.TOP, fill=tk.X, pady=(2, 0))
+
+    def _make_icon_button(self, parent, icon_key, fallback_text, command):
+        if icon_key in self._icons:
+            return ttk.Button(
+                parent, image=self._icons[icon_key],
+                style="TabIcon.Toolbutton", command=command, takefocus=False,
+            )
+        return ttk.Button(
+            parent, text=fallback_text,
+            style="TabIcon.Toolbutton", command=command, takefocus=False,
+        )
 
     # ------------------------------------------------------------------ #
     #  Scanner input handling                                              #
@@ -286,6 +348,9 @@ class MainWindow(tk.Tk):
         ):
             return
         self._manager.delete_session(session)
+        if self._manager.current is None:
+            # Never leave zero sessions — keep the tab row populated.
+            self._manager.start_session()
         self._scan_status_var.set("")
         self._on_session_changed()
 
@@ -298,19 +363,13 @@ class MainWindow(tk.Tk):
         self._refresh_status()
 
     def _on_session_changed(self):
-        """Sync the whole UI to the currently active session (or the empty state)."""
+        """Sync the whole UI to the currently active session."""
         self._rebuild_tab_bar()
         session = self._manager.current
-
         if session is None:
-            self._btn_start.config(text="Start session")
-            self._btn_reset.config(state=tk.DISABLED)
             self._clear_table()
             self._refresh_status()
             return
-
-        self._btn_start.config(text="New session")
-        self._btn_reset.config(state=tk.NORMAL)
 
         # Default this session's price list to the first one if a catalog is loaded.
         if self._catalog and not session.price_type and self._catalog.price_names:
@@ -411,11 +470,7 @@ class MainWindow(tk.Tk):
             self._status_var.set("No active session")
             return
         started = session.started_at.strftime("%H:%M:%S")
-        count = session.count
-        text = (
-            f"{session.name}  —  started {started}   ·   "
-            f"{count} scanned"
-        )
+        text = f"{session.name}  —  started {started}   ·   {session.count} scanned"
         n = len(self._manager.sessions)
         if n > 1:
             text += f"   ({n} sessions open)"
