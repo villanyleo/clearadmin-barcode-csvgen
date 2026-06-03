@@ -6,7 +6,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
-from core import sound
+from core import persistence, sound
 from core.catalog import Catalog, load_catalog
 from core.session import Session, SessionManager
 from core.validation import is_valid_ean13
@@ -51,14 +51,20 @@ class MainWindow(tk.Tk):
         self._highlighted_item: str | None = None
         # Product catalog loaded from a CSV (shared by all sessions; None until loaded).
         self._catalog: Catalog | None = None
+        self._csv_path: str | None = None  # last opened CSV, remembered across runs
         self._price_var = tk.StringVar()
         self._icons = self._load_icons()
 
         self._build_ui()
         self._bind_scanner_input()
-        # Always start with one open session, so the tab row is shown from launch.
-        self._manager.start_session()
+
+        # Restore the previous run's sessions and CSV, or start fresh.
+        if not self._restore_state():
+            self._manager.start_session()
         self._on_session_changed()
+
+        # Persist everything when the window is closed.
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------ #
     #  Styling / assets                                                    #
@@ -321,6 +327,39 @@ class MainWindow(tk.Tk):
     #  Session / tab callbacks                                             #
     # ------------------------------------------------------------------ #
 
+    def _restore_state(self) -> bool:
+        """Reload the previous run's sessions + CSV. Returns True if anything restored."""
+        state = persistence.load_state()
+        if not state:
+            return False
+        try:
+            manager_data = state.get("manager") or {}
+            if not manager_data.get("sessions"):
+                return False
+            self._manager.load_state(manager_data)
+
+            csv_path = state.get("csv_path")
+            if csv_path and os.path.exists(csv_path):
+                try:
+                    self._catalog = load_catalog(csv_path)
+                    self._csv_path = csv_path
+                    self._price_combo.config(
+                        values=self._catalog.price_names, state="readonly"
+                    )
+                except Exception:
+                    self._catalog = None  # file changed/unreadable — carry on without it
+        except Exception:
+            # Corrupt/incompatible state — start fresh rather than crash.
+            self._manager = SessionManager()
+            return False
+        return self._manager.current is not None
+
+    def _on_close(self):
+        persistence.save_state(
+            {"manager": self._manager.to_dict(), "csv_path": self._csv_path}
+        )
+        self.destroy()
+
     def _on_start_session(self):
         self._manager.start_session()
         self._scan_status_var.set("")
@@ -399,6 +438,7 @@ class MainWindow(tk.Tk):
             return
 
         self._catalog = catalog
+        self._csv_path = path
         self._price_combo.config(values=catalog.price_names, state="readonly")
 
         session = self._manager.current

@@ -62,6 +62,43 @@ class Session:
     def count(self) -> int:
         return len(self.entries)
 
+    # -- serialization (for saving/restoring on exit) ------------------- #
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "started_at": self.started_at.isoformat(),
+            "price_type": self.price_type,
+            "entries": [
+                {
+                    "value": e.value,
+                    "timestamp": e.timestamp.isoformat(),
+                    "sequence": e.sequence,
+                }
+                for e in self.entries
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Session":
+        session = cls(
+            id=data["id"],
+            started_at=datetime.fromisoformat(data["started_at"]),
+            name=data.get("name", f"Session {data['id']}"),
+            price_type=data.get("price_type"),
+        )
+        for ed in data.get("entries", []):
+            entry = BarcodeEntry(
+                value=ed["value"],
+                timestamp=datetime.fromisoformat(ed["timestamp"]),
+                session_id=session.id,
+                sequence=ed.get("sequence", len(session.entries) + 1),
+            )
+            session.entries.append(entry)
+            session._counts[entry.value] += 1
+        return session
+
 
 class SessionManager:
     def __init__(self):
@@ -129,3 +166,26 @@ class SessionManager:
         if self._current is None:
             return []
         return list(self._current.entries)
+
+    # -- serialization (for saving/restoring on exit) ------------------- #
+
+    def to_dict(self) -> dict:
+        return {
+            "session_counter": self._session_counter,
+            "active_id": self._current.id if self._current else None,
+            "sessions": [s.to_dict() for s in self._sessions],
+        }
+
+    def load_state(self, data: dict) -> Optional[Session]:
+        """Replace all sessions from *data*. Returns the restored active session."""
+        self._sessions = [Session.from_dict(s) for s in data.get("sessions", [])]
+        self._session_counter = data.get("session_counter", len(self._sessions))
+        self._current = None
+        active_id = data.get("active_id")
+        if active_id is not None:
+            self._current = next(
+                (s for s in self._sessions if s.id == active_id), None
+            )
+        if self._current is None and self._sessions:
+            self._current = self._sessions[0]
+        return self._current
