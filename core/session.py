@@ -119,12 +119,22 @@ class SessionManager:
         """All open sessions, in creation order."""
         return list(self._sessions)
 
+    def _next_default_name(self) -> str:
+        """Lowest 'Session N' not currently used by an open session."""
+        existing = {s.name for s in self._sessions}
+        n = 1
+        while f"Session {n}" in existing:
+            n += 1
+        return f"Session {n}"
+
     def start_session(self) -> Session:
+        # id stays a monotonic, never-reused identity; the display name reuses
+        # the lowest free "Session N" slot among the currently open sessions.
         self._session_counter += 1
         session = Session(
             id=self._session_counter,
             started_at=datetime.now(),
-            name=f"Session {self._session_counter}",
+            name=self._next_default_name(),
         )
         self._sessions.append(session)
         self._current = session
