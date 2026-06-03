@@ -44,6 +44,25 @@ class Session:
         self.entries.clear()
         self._counts.clear()
 
+    def increment(self, value: str) -> None:
+        """Manually bump a product's quantity by one (like an extra scan)."""
+        self.add_barcode(value)
+
+    def decrement(self, value: str) -> None:
+        """Manually lower a product's quantity by one (never below one)."""
+        if self._counts.get(value, 0) <= 1:
+            return
+        for i in range(len(self.entries) - 1, -1, -1):
+            if self.entries[i].value == value:
+                del self.entries[i]
+                break
+        self._counts[value] -= 1
+
+    def remove_product(self, value: str) -> None:
+        """Remove a product from the session entirely."""
+        self.entries = [e for e in self.entries if e.value != value]
+        self._counts.pop(value, None)
+
     def aggregated(self):
         """Unique barcodes in first-scan order as (value, count, last_timestamp)."""
         order: List[str] = []

@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 COLOR = (60, 60, 60, 255)        # dark grey strokes, native-looking on light tabs
+COLOR_RED = (207, 34, 46, 255)   # #cf222e — red delete/bin
 SS = 16                          # supersampling factor for smooth edges
 
 
@@ -64,14 +65,14 @@ def draw_edit(size, name):
     _save(img, size, name)
 
 
-def draw_delete(size, name):
+def draw_delete(size, name, color=COLOR):
     """An outline trash can (Fluent 'delete' style)."""
     img, d = _canvas(size)
     u = size * SS / 20.0
     width = int(1.7 * u)
 
     def line(p0, p1):
-        d.line([(p0[0] * u, p0[1] * u), (p1[0] * u, p1[1] * u)], fill=COLOR, width=width)
+        d.line([(p0[0] * u, p0[1] * u), (p1[0] * u, p1[1] * u)], fill=color, width=width)
 
     line((3, 5.3), (17, 5.3))          # lid
     line((8, 5.3), (8.4, 3.4))         # handle
@@ -87,14 +88,14 @@ def draw_delete(size, name):
     # Soften the line ends with round caps.
     r = width / 2
     for (x, y) in [(3, 5.3), (17, 5.3), (6.0, 16.6), (14.0, 16.6)]:
-        d.ellipse([x * u - r, y * u - r, x * u + r, y * u + r], fill=COLOR)
+        d.ellipse([x * u - r, y * u - r, x * u + r, y * u + r], fill=color)
 
     _save(img, size, name)
 
 
 if __name__ == "__main__":
     draw_edit(18, "edit.png")
-    draw_delete(18, "delete.png")
     draw_edit(36, "edit@2x.png")
-    draw_delete(36, "delete@2x.png")
+    draw_delete(18, "delete_red.png", COLOR_RED)
+    draw_delete(36, "delete_red@2x.png", COLOR_RED)
     print(f"Icons written to {OUT_DIR}")

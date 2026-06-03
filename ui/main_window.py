@@ -10,6 +10,7 @@ from core import export, persistence, sound
 from core.catalog import Catalog, load_catalog
 from core.session import Session, SessionManager
 from core.validation import is_valid_ean13
+from ui.product_table import ProductTable
 
 
 class MainWindow(tk.Tk):
@@ -45,10 +46,6 @@ class MainWindow(tk.Tk):
 
         self._manager = SessionManager()
         self._input_buffer: list[str] = []
-        # Maps a barcode value -> its Treeview row id for the ACTIVE session,
-        # so re-scans update in place. Rebuilt whenever the active tab changes.
-        self._row_for_value: dict[str, str] = {}
-        self._highlighted_item: str | None = None
         # Product catalog loaded from a CSV (shared by all sessions; None until loaded).
         self._catalog: Catalog | None = None
         self._csv_path: str | None = None  # last opened CSV, remembered across runs
@@ -95,7 +92,7 @@ class MainWindow(tk.Tk):
 
     def _load_icons(self) -> dict:
         icons = {}
-        for key, fname in (("edit", "edit.png"), ("delete", "delete.png")):
+        for key, fname in (("edit", "edit.png"), ("delete", "delete_red.png")):
             try:
                 icons[key] = tk.PhotoImage(file=self._asset_path(fname))
             except tk.TclError:
@@ -148,39 +145,18 @@ class MainWindow(tk.Tk):
         self._tab_bar = tk.Frame(self, bg=self._tab_bg)
         self._tab_bar.pack(side=tk.TOP, fill=tk.X)
 
-        # ── Barcode table ────────────────────────────────────────────────
+        # ── Editable product table ───────────────────────────────────────
         table_frame = ttk.Frame(self, padding=(8, 6, 8, 8))
         table_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        columns = ("#", "Barcode", "Name", "pcs", "Price", "Time")
-        self._tree = ttk.Treeview(
-            table_frame, columns=columns, show="headings", selectmode="browse"
+        self._table = ProductTable(
+            table_frame,
+            on_increment=self._on_increment,
+            on_decrement=self._on_decrement,
+            on_delete=self._on_delete_product,
+            delete_icon=self._icons.get("delete"),
+            delete_fallback=self.FALLBACK_DELETE,
         )
-
-        self._tree.heading("#", text="#")
-        self._tree.heading("Barcode", text="Barcode")
-        self._tree.heading("Name", text="Name")
-        self._tree.heading("pcs", text="pcs")
-        self._tree.heading("Price", text="Price")
-        self._tree.heading("Time", text="Time")
-
-        self._tree.column("#", width=40, anchor=tk.CENTER, stretch=False)
-        self._tree.column("Barcode", width=130, anchor=tk.W, stretch=False)
-        self._tree.column("Name", width=380, anchor=tk.W)
-        self._tree.column("pcs", width=55, anchor=tk.CENTER, stretch=False)
-        self._tree.column("Price", width=90, anchor=tk.E, stretch=False)
-        self._tree.column("Time", width=110, anchor=tk.CENTER, stretch=False)
-
-        # Light-green background marking the most recently scanned row.
-        self._tree.tag_configure("last_scanned", background=self.COLOR_ROW_HIGHLIGHT)
-
-        vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self._tree.yview)
-        self._tree.configure(yscrollcommand=vsb.set)
-
-        self._tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        table_frame.rowconfigure(0, weight=1)
-        table_frame.columnconfigure(0, weight=1)
+        self._table.pack(fill=tk.BOTH, expand=True)
 
         # ── Bottom status bar (last-scan result) ─────────────────────────
         self._scan_status_var = tk.StringVar(value="")
@@ -286,26 +262,10 @@ class MainWindow(tk.Tk):
         entry = self._manager.add_barcode(value)
         if entry is None:
             return
-
         count = self._manager.current.count_for(value)
-        time_str = entry.timestamp.strftime("%H:%M:%S")
-
-        item = self._row_for_value.get(value)
-        if item is None:
-            # First time this barcode appears in this session — add a new row.
-            row_number = len(self._row_for_value) + 1
-            name, price = self._catalog_fields(value)
-            item = self._tree.insert(
-                "", tk.END, values=(row_number, value, name, count, price, time_str)
-            )
-            self._row_for_value[value] = item
-        else:
-            # Seen before — bump the pcs count and refresh the last-scan time.
-            self._tree.set(item, "pcs", count)
-            self._tree.set(item, "Time", time_str)
-
-        self._highlight_row(item)
-        self._tree.see(item)
+        name, price = self._catalog_fields(value)
+        self._table.upsert(value, name, count, price, entry.timestamp.strftime("%H:%M:%S"))
+        self._table.highlight(value)
         self._refresh_status()
 
     def _catalog_fields(self, value: str) -> tuple[str, str]:
@@ -317,16 +277,35 @@ class MainWindow(tk.Tk):
             return "", ""
         return product.name, product.prices.get(self._price_var.get(), "")
 
-    def _highlight_row(self, item: str):
-        """Mark *item* as the last-scanned row (light green) and clear the previous one."""
-        if (
-            self._highlighted_item is not None
-            and self._highlighted_item != item
-            and self._tree.exists(self._highlighted_item)
+    # -- inline quantity / product editing ------------------------------ #
+
+    def _on_increment(self, value: str):
+        session = self._manager.current
+        if session is None:
+            return
+        session.increment(value)
+        self._table.set_count(value, session.count_for(value))
+        self._refresh_status()
+
+    def _on_decrement(self, value: str):
+        session = self._manager.current
+        if session is None:
+            return
+        session.decrement(value)
+        self._table.set_count(value, session.count_for(value))
+        self._refresh_status()
+
+    def _on_delete_product(self, value: str):
+        session = self._manager.current
+        if session is None:
+            return
+        if not messagebox.askyesno(
+            "Delete product", "Remove this product from the session?"
         ):
-            self._tree.item(self._highlighted_item, tags=())
-        self._tree.item(item, tags=("last_scanned",))
-        self._highlighted_item = item
+            return
+        session.remove_product(value)
+        self._table.remove(value)
+        self._refresh_status()
 
     # ------------------------------------------------------------------ #
     #  Session / tab callbacks                                             #
@@ -514,39 +493,34 @@ class MainWindow(tk.Tk):
         """Update the Name and Price cells of every row from the loaded catalog."""
         if self._catalog is None:
             return
-        for value, item in self._row_for_value.items():
+        for value in self._table.values():
             name, price = self._catalog_fields(value)
-            self._tree.set(item, "Name", name)
-            self._tree.set(item, "Price", price)
+            self._table.update_cells(value, name, price)
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #
     # ------------------------------------------------------------------ #
 
     def _clear_table(self):
-        for item in self._tree.get_children():
-            self._tree.delete(item)
-        self._row_for_value.clear()
-        self._highlighted_item = None
+        self._table.clear()
 
     def _populate_table_from_session(self, session: Session):
         """Rebuild the table to show *session*'s scans (used on tab switch / reset)."""
-        self._clear_table()
+        rows = []
         for value, count, last_ts in session.aggregated():
             name, price = self._catalog_fields(value)
-            row_number = len(self._row_for_value) + 1
-            item = self._tree.insert(
-                "",
-                tk.END,
-                values=(row_number, value, name, count, price,
-                        last_ts.strftime("%H:%M:%S")),
-            )
-            self._row_for_value[value] = item
+            rows.append({
+                "value": value,
+                "name": name,
+                "count": count,
+                "price": price,
+                "time": last_ts.strftime("%H:%M:%S"),
+            })
+        self._table.set_rows(rows)
 
         last = session.last_value()
-        if last is not None and last in self._row_for_value:
-            self._highlight_row(self._row_for_value[last])
-            self._tree.see(self._row_for_value[last])
+        if last is not None:
+            self._table.highlight(last)
 
     def _set_scan_status(self, text: str, success: bool):
         """Show the last-scan result in the bottom bar, colour-coded."""
