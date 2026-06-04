@@ -76,6 +76,11 @@ jobs:
           path: "dist/ClearAdmin-CSV-vonalkod-olvaso.exe"
           if-no-files-found: error
 
+      # A portable kiadáshoz a README-ben dokumentált „-Portable” nevű másolatot készítünk.
+      - name: Portable verzió elnevezése
+        shell: pwsh
+        run: Copy-Item "dist/ClearAdmin-CSV-vonalkod-olvaso.exe" "dist/ClearAdmin-CSV-vonalkod-olvaso-Portable.exe"
+
       # ── Release közzététele csak akkor, ha verziócímke érkezik ──────
       - name: GitHub Release közzététele
         if: startsWith(github.ref, 'refs/tags/v')
@@ -85,5 +90,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            installer_output/*.exe
-            dist/ClearAdmin-CSV-vonalkod-olvaso.exe
+            installer_output/ClearAdmin-CSV-vonalkod-olvaso-Setup.exe
+            dist/ClearAdmin-CSV-vonalkod-olvaso-Portable.exe
