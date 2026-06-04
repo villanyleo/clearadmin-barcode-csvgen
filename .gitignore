@@ -25,11 +25,3 @@ build/
 dist/
 *.spec
 installer_output/
-
-# ── Confidential data ────────────────────────────────────────────────
-# A valódi termék-CSV-k bizalmas VillanyLeó-árakat tartalmaznak — sosem kerülnek be.
-*.csv
-
-# A minta CSV-fájlok viszont igen: nincs bennük valódi adat, csak példák.
-!minta/termeklista.csv
-!minta/export_minta.csv
